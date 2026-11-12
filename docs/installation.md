@@ -1,5 +1,7 @@
 # 설치
 
+**한국어** | [English](en/installation.md)
+
 MSDF는 **아직 PyPI에 올리지 않았습니다.** `pip install msdf`로는 설치되지 않으며, 아래 세 방법 중 하나를 씁니다.
 
 | 방법 | 어디에 | 웹 UI |
@@ -136,6 +138,7 @@ pip install "msdf-0.1.0-py3-none-any.whl[server]"
 | 증상 | 확인할 것 |
 | --- | --- |
 | `pip install msdf`가 실패한다 | 아직 PyPI에 없습니다. 위의 방법을 쓰세요 |
+| Windows에서 `msdf`나 `python`이 `UnicodeDecodeError: 'cp949' codec can't decode`를 내며 시작하지 않는다 | 프로젝트 경로에 한글이 있고 파이썬이 3.12 이하라서, 편집 가능 설치가 만든 `.pth` 파일을 cp949로 읽다 실패한 것입니다. ① `PYTHONUTF8=1`로 UTF-8 모드를 켜거나(PowerShell: `$env:PYTHONUTF8 = "1"`, 계속 쓰려면 `setx PYTHONUTF8 1` 후 새 터미널), ② 영문 경로(예: `C:\dev\MSDF`)로 옮겨 `.venv`를 다시 만들거나, ③ 파이썬 3.13 이상을 쓰세요 |
 | `msdf: command not found` | 가상 환경을 켰는지(`source .venv/bin/activate`), uv라면 `uv run msdf` |
 | `/ui`에 "빌드되지 않았습니다"가 나온다 | `cd frontend && npm run build`, 또는 `msdf up --ui-dist 경로` |
 | `npm run build`가 Node 버전 오류를 낸다 | Node.js 20.19 이상 또는 22.12 이상 |

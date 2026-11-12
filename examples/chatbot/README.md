@@ -1,5 +1,7 @@
 # 챗봇 예제
 
+**한국어** | [English](README.en.md)
+
 서비스 넷(chatbot, search, embedding, processing)이 서로를 모른 채 데이터를 주고받는 예제입니다.
 **LLM이나 검색 엔진을 부르지 않습니다.** `sample_docs.json`의 예시 문서로 검색하고,
 단어 빈도로 벡터를 흉내 내고, 첫 문장을 요약으로 씁니다. MSDF가 흐름을 어떻게 연결하는지 보여 주는 것이 목적입니다.

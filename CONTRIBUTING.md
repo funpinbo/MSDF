@@ -1,5 +1,7 @@
 # 기여 안내
 
+**한국어** | [English](CONTRIBUTING.en.md)
+
 현재 버전: **0.1.0.** 다음에 할 일은 [docs/roadmap.md](docs/roadmap.md)의 "다음에 할 것"에 있습니다.
 
 ## 시작하기
@@ -19,6 +21,8 @@ cd frontend && npm install && npm run build   # 웹 UI (빌드 결과는 커밋�
 3. [docs/roadmap.md](docs/roadmap.md) — 어디까지 왔고 어디로 가는가
 
 문서에 적힌 동작을 바꾸려면 이슈를 먼저 열어 주세요. 하나를 바꾸면 다른 쪽이 따라 바뀌는 결정이 많습니다.
+
+문서는 한국어(`docs/`)와 영어(`docs/en/`) 두 벌입니다. 한쪽을 고치면 다른 쪽도 함께 고쳐 주세요.
 
 ## 코드 지도
 

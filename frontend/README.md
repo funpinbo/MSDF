@@ -1,5 +1,7 @@
 # MSDF 웹 UI
 
+**한국어** | [English](README.en.md)
+
 `msdf up`이 `/ui`에서 보여 주는 화면의 소스입니다. Vue 3 + Vue Flow + Vite.
 
 빌드 결과(`ms_dataflow/ui/dist`)는 저장소에 넣지 않습니다. 저장소를 받은 뒤 한 번 빌드하세요.
