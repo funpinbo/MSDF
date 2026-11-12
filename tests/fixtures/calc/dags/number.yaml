@@ -1,0 +1,17 @@
+order: number
+
+nodes:
+  make:   {service: src, action: make}
+  add:    {service: mid, action: add}
+  double: {service: mid, action: double}
+
+edges:
+  - {from: make.out, to: add.x}
+  - {from: add.out, to: double.x}
+
+result: double.out
+
+deliveries:
+  - requester: req
+    on_success: req.on_done
+    on_fail:    req.on_fail

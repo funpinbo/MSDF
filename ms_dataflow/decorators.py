@@ -209,40 +209,55 @@ def order(name: str, params: dict[str, Any] | None = None) -> str:
 
 
 # --- 실행 시점에 함수 찾기 ---------------------------------------------------
-_loaded: dict[str, ModuleType] = {}
+_loaded: dict[str, tuple[ModuleType, float]] = {}
 
 
-def _module_for(file: str, roots: Sequence[str]) -> ModuleType:
-    for mod in list(sys.modules.values()):
-        f = getattr(mod, "__file__", None)
-        if f and _realpath(f) == file:
-            return mod
-    if file in _loaded:
-        return _loaded[file]
+def _mtime(file: str) -> float:
+    try:
+        return os.stat(file).st_mtime_ns / 1e9
+    except OSError:
+        return 0.0
+
+
+def _load_file(file: str, roots: Sequence[str]) -> ModuleType:
     for p in [os.path.dirname(file), *roots]:
         if p not in sys.path:
             sys.path.insert(0, p)
-    name = "msdf_user_" + str(abs(hash(file)))
+    name = "msdf_user_" + str(abs(hash((file, _mtime(file)))))
     spec = importlib.util.spec_from_file_location(name, file)
     if spec is None or spec.loader is None:  # pragma: no cover
         raise ImportError(file)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[name] = mod
     spec.loader.exec_module(mod)
-    _loaded[file] = mod
+    _loaded[file] = (mod, _mtime(file))
     return mod
 
 
+def _already_imported(file: str) -> bool:
+    for mod in list(sys.modules.values()):
+        f = getattr(mod, "__file__", None)
+        if f and not mod.__name__.startswith("msdf_user_") and _realpath(f) == file:
+            return True
+    return False
+
+
 def resolve_function(file: str, name: str, roots: Sequence[str] = ()) -> Callable[..., Any]:
-    """Action 함수를 찾는다. 이미 import된 것을 먼저 쓰고, 없으면 그 파일만 import한다."""
-    key = (_realpath(file), name)
+    """Action 함수를 찾는다.
+
+    서비스 프로세스가 이미 import한 함수를 먼저 쓴다. 없으면 그 파일만 import하고,
+    그렇게 불러온 파일이 바뀌었으면 다시 불러온다.
+    """
+    real = _realpath(file)
+    key = (real, name)
+    if real in _loaded and _loaded[real][1] != _mtime(real):
+        _load_file(real, roots)
     with _lock:
         fn = _FUNCTIONS.get(key)
-    if fn is not None:
-        return fn
-    _module_for(key[0], roots)
-    with _lock:
-        fn = _FUNCTIONS.get(key)
+    if fn is None and not _already_imported(real):
+        _load_file(real, roots)
+        with _lock:
+            fn = _FUNCTIONS.get(key)
     if fn is None:
         raise LookupError(f"{file}에서 Action '{name}'을 찾지 못했습니다")
     return fn
