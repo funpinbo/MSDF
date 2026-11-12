@@ -1,4 +1,4 @@
 # 엔진 프로세스만 들고 있다. 서비스는 어느 DB인지 모른다.
-search.fetch.out:          {backend: sqlite, table: fetched_raw}
-processing.refine.summary: {backend: file, path: ./store/summary}
-default:                   {backend: file, path: ./store}    # 매핑이 없으면 기본값
+search.fetch.out:          {backend: sqlite, path: ./.msdf/search.db, table: fetched_raw}
+processing.refine.summary: {backend: file, path: ./.msdf/store/summary}
+default:                   {backend: file, path: ./.msdf/store}    # 매핑이 없으면 기본값
