@@ -82,6 +82,13 @@ def cmd_up(args: argparse.Namespace) -> int:
             print(f"UI 빌드 없음 ({dist_dir()}): /ui에서 빌드 방법을 안내합니다.")
     if args.host not in ("127.0.0.1", "localhost", "::1"):
         print("주의: 엔진 API에는 인증이 없습니다. 믿을 수 있는 네트워크에서만 여세요.")
+    else:
+        print(
+            "이 주소는 엔진이 도는 컴퓨터에서만 열립니다. "
+            "다른 컴퓨터(원격 서버, VM)의 브라우저에서 보려면\n"
+            f"  내 컴퓨터에서: ssh -L {args.port}:127.0.0.1:{args.port} 사용자@서버  "
+            f"→ http://127.0.0.1:{args.port}/ui"
+        )
     print(f"DB: {db}")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)

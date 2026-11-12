@@ -68,7 +68,8 @@ uv run python processing.py     # terminal 4
 uv run python chatbot.py        # terminal 5 — type questions here
 ```
 
-Open `http://127.0.0.1:8787/ui` in a browser.
+Open `http://127.0.0.1:8787/ui` in a browser. If the engine runs on a remote server or VM, first open a tunnel from your computer with
+`ssh -L 8787:127.0.0.1:8787 user@server`, then open the same address ([Troubleshooting](installation.md#troubleshooting)).
 
 - **Live map**: the four services, the data flow, and per-step success, failure and cache counts, refreshed every 2 seconds.
 - **DAG editor**: view and edit the `search_result` DAG as a graph.

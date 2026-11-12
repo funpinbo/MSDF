@@ -195,3 +195,21 @@ def test_ui_serves_build(sched, tmp_path, monkeypatch):
         assert c.get("/ui/logs").text == "<div id=app></div>"  # SPA 경로
         assert c.get("/ui/../../etc/passwd").status_code in (200, 404)
         assert "root:" not in c.get("/ui/..%2F..%2F..%2Fetc%2Fpasswd").text
+
+
+def test_ui_media_types_do_not_depend_on_system(sched, tmp_path, monkeypatch):
+    """Windows처럼 시스템이 .js를 text/plain으로 알려 줘도 JavaScript로 보낸다."""
+    import mimetypes
+
+    monkeypatch.setattr(mimetypes, "guess_type", lambda *a, **k: ("text/plain", None))
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<div id=app></div>")
+    (dist / "assets" / "app.js").write_text("console.log(1)")
+    (dist / "assets" / "app.css").write_text("body{}")
+    monkeypatch.delenv("MSDF_UI_DIST", raising=False)
+    monkeypatch.setattr(ui, "DIST", dist)
+    with TestClient(sched.app()) as c:
+        assert c.get("/ui/assets/app.js").headers["content-type"].startswith("text/javascript")
+        assert c.get("/ui/assets/app.css").headers["content-type"].startswith("text/css")
+        assert c.get("/ui/").headers["content-type"].startswith("text/html")

@@ -142,5 +142,6 @@ pip install "msdf-0.1.0-py3-none-any.whl[server]"
 | `msdf: command not found` | 가상 환경을 켰는지(`source .venv/bin/activate`), uv라면 `uv run msdf` |
 | `/ui`에 "빌드되지 않았습니다"가 나온다 | `cd frontend && npm run build`, 또는 `msdf up --ui-dist 경로` |
 | `npm run build`가 Node 버전 오류를 낸다 | Node.js 20.19 이상 또는 22.12 이상 |
+| 브라우저에서 `http://127.0.0.1:8787/ui`가 열리지 않는다 | ① `msdf up`이 떠 있는지(`run_local.py`에는 웹 UI가 없습니다), ② 엔진이 원격 서버·VM에서 돈다면 `127.0.0.1`은 그 컴퓨터 자신만 가리킵니다. 내 컴퓨터에서 `ssh -L 8787:127.0.0.1:8787 사용자@서버`로 터널을 연 뒤 `http://127.0.0.1:8787/ui`를 엽니다. 믿을 수 있는 네트워크라면 `msdf up --host 0.0.0.0`으로 열고 `http://서버주소:8787/ui`로 접속해도 됩니다(방화벽에서 8787 허용). ③ 화면이 비어 있으면 `frontend`에서 `npm run build`를 했는지 확인하세요 |
 | `start()`가 "엔진을 기다리는 중"에서 멈춘다 | `msdf up`이 떠 있는지, 주소가 맞는지(`MSDF_SCHEDULER`) |
 | 엔진이 "스키마 v1로 만들어졌고" 오류를 낸다 | 0.x 동안은 DB를 자동 변환하지 않습니다. `.msdf/msdf.db`를 지우고 다시 시작 (캐시와 실행 기록만 사라짐) |

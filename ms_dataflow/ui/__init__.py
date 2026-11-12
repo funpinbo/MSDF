@@ -25,6 +25,23 @@ if TYPE_CHECKING:
 
 DIST = Path(__file__).parent / "dist"
 
+# 파일 형식을 시스템 설정에 맡기지 않는다. Windows는 레지스트리 값을 써서 .js를 text/plain으로
+# 알려 주는 경우가 있는데, 그러면 브라우저가 스크립트를 실행하지 않아 화면이 비어 버린다.
+MEDIA_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json",
+    ".map": "application/json",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".ico": "image/x-icon",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".txt": "text/plain; charset=utf-8",
+}
+
 
 def dist_dir() -> Path:
     """UI 빌드 폴더. MSDF_UI_DIST(또는 msdf up --ui-dist)가 있으면 그것을 쓴다."""
@@ -157,8 +174,9 @@ def install(sched: Scheduler) -> None:
                 return HTMLResponse(_NOT_BUILT)
             target = (dist / path).resolve()
             if path and target.is_file() and dist.resolve() in target.parents:
-                return FileResponse(target)
-            return FileResponse(index)  # 해시 라우팅이라 나머지는 index.html
+                return FileResponse(target, media_type=MEDIA_TYPES.get(target.suffix.lower()))
+            # 해시 라우팅이라 나머지는 index.html
+            return FileResponse(index, media_type=MEDIA_TYPES[".html"])
 
         # --- 맵 --------------------------------------------------------------
         @app.get("/api/overview")

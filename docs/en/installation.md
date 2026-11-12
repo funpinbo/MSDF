@@ -142,5 +142,6 @@ It is safest for the engine and all services to use **the same version**. Use th
 | `msdf: command not found` | Is the virtual environment active (`source .venv/bin/activate`)? With uv, use `uv run msdf` |
 | `/ui` says the UI has not been built | `cd frontend && npm run build`, or `msdf up --ui-dist PATH` |
 | `npm run build` fails with a Node version error | Node.js 20.19+ or 22.12+ |
+| `http://127.0.0.1:8787/ui` does not open in the browser | ① Is `msdf up` running? (`run_local.py` has no web UI.) ② If the engine runs on a remote server or VM, `127.0.0.1` means that machine itself. Open a tunnel from your computer with `ssh -L 8787:127.0.0.1:8787 user@server`, then open `http://127.0.0.1:8787/ui`. On a trusted network you can also start `msdf up --host 0.0.0.0` and open `http://server-address:8787/ui` (allow port 8787 in the firewall). ③ If the page is blank, check that you ran `npm run build` in `frontend` |
 | `start()` hangs while "waiting for the engine" | Is `msdf up` running, and is the address right (`MSDF_SCHEDULER`)? |
 | The engine says the DB was "created with schema v1" | During 0.x the DB is not migrated automatically. Delete `.msdf/msdf.db` and restart (only the cache and run history are lost) |

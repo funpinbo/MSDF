@@ -28,3 +28,7 @@ if __name__ == "__main__":
             plan = runner.last.plan
             cached = f" (캐시: {', '.join(plan.cached)})" if plan.cached else ""
             print(f"  실행한 단계: {', '.join(s.node for s in plan.steps) or '없음'}{cached}")
+    print(
+        "\n(웹 UI는 이 데모에는 없습니다. "
+        "uv run msdf up으로 엔진을 띄우면 http://127.0.0.1:8787/ui 에서 볼 수 있습니다.)"
+    )
