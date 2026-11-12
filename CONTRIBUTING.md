@@ -1,6 +1,6 @@
 # 기여 안내
 
-현재 상태: **설계 완료, 구현 시작 전.** 코드보다 설계 논의가 더 유용한 시기입니다.
+현재 버전: **0.1.0.** 다음에 할 일은 [docs/roadmap.md](docs/roadmap.md)의 "다음에 할 것"에 있습니다.
 
 ## 시작하기
 
@@ -19,10 +19,25 @@ uv run pytest
 
 문서에 적힌 동작을 바꾸려면 이슈를 먼저 열어 주세요. 하나를 바꾸면 다른 쪽이 따라 바뀌는 결정이 많습니다.
 
-## 구현 순서
+## 코드 지도
 
-[docs/roadmap.md](docs/roadmap.md)에 10단계가 있습니다. 앞 단계 위에 뒤 단계가 쌓이므로 순서대로 가는 편이 낫습니다.
-1~5단계는 프로세스 하나로 돌려볼 수 있어 Worker 서버 없이도 검증됩니다.
+| 위치 | 내용 |
+| --- | --- |
+| `ms_dataflow/decorators.py` | 사용자 API: `service`, `action`, `order`, `context`, `delete` |
+| `ms_dataflow/client.py` | `start()`, 엔진으로 가는 HTTP |
+| `ms_dataflow/ids.py` | 모든 해시 (Planner와 Resolver가 같이 쓴다) |
+| `ms_dataflow/registry/` | `ast` 분석, 소속 판정 |
+| `ms_dataflow/config/` | DAG, IAM, resolvers 로딩과 검증 |
+| `ms_dataflow/planner.py` | 순수 함수. DB에 쓰지 않는다 |
+| `ms_dataflow/execute/engine.py` | 큐, 결과 등록, 재시도, 실패 전파 (단일 스레드) |
+| `ms_dataflow/execute/scheduler.py`, `worker.py` | HTTP 서버 양쪽 |
+| `ms_dataflow/execute/local.py` | 프로세스 하나로 돌리는 `LocalRunner` (테스트용) |
+| `ms_dataflow/ops.py` | 삭제, hot/cold 보관, 계보 조회 |
+| `ms_dataflow/ui/` | 웹 UI (의존성 없는 페이지 하나 + JSON API) |
+| `tests/fixtures/calc/` | 도메인 없는 검증용 서비스. 프레임워크 테스트는 이것으로 한다 |
+
+테스트는 `tests/fixtures/calc`의 최소 서비스로 프레임워크 동작만 검증합니다. `examples/`는 사용자에게 보여 주는 예시이며,
+`tests/test_examples.py`는 예제가 깨지지 않았는지만 확인합니다.
 
 ## 테스트에서 먼저 지켜야 할 것
 
@@ -32,7 +47,8 @@ uv run pytest
 2. **Planner와 Resolver의 ID 일치** — `planned_id`와 Resolver 발급 값이 같아야 한다
 3. **version 정규화** — 주석·공백만 다르면 같은 version, 로직이 다르면 다른 version
 4. **소속 판정** — 두 서비스가 같은 Action에 닿으면 로딩 오류
-5. **재시작 안전성** — Scheduler를 임의 시점에 죽였다 살려도 상태가 복구된다
+5. **재시작 안전성** — Worker를 실행 중에 죽여도 단계가 다시 배정된다 (`tests/test_distributed.py`).
+   Scheduler 자체를 임의 시점에 죽였다 살리는 테스트는 아직 없습니다.
 
 ## 코드 스타일
 

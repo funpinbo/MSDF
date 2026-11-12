@@ -1,6 +1,6 @@
 [project]
 name = "msdf"
-version = "0.0.0"
+version = "0.1.0"
 description = "Micro Service Data Flow — data-centric orchestration for microservices"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -9,7 +9,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "Jaehwi Lee" }]
 keywords = ["dataflow", "orchestration", "microservices", "dag", "lineage"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
