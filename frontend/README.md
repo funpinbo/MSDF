@@ -38,13 +38,14 @@ npm run dev          # 터미널 2 — http://localhost:5173/ui/ (/api는 엔진
 | `#/logs/services` | 서비스 | 인스턴스, 심박, Action별 통계 |
 | `#/logs/dags` | DAG | DAG별 통계와 YAML |
 | `#/logs/engine` | 엔진 로그 | 엔진 프로세스의 로그를 실시간으로 |
-| `#/runs/:id` | 실행 상세 | 실행 하나의 그래프, 단계 타임라인, 실패 위치, 결과 계보 |
+| `#/runs/:id` | 실행 상세 | 실행 하나의 그래프, 단계 타임라인, 실패 위치, 결과 계보, 실행 취소 |
+| `#/iam` | 권한 | IAM 계층과 규칙 편집·검증·저장, 권한 시험 |
 
 ## 파일
 
 | 파일 | 내용 |
 | --- | --- |
-| `src/api.js` | API 호출과 주기적 갱신 (`usePoll`) |
+| `src/api.js` | API 호출, 엔진 토큰, 실시간 신호(SSE)를 받아 다시 읽기 (`usePoll`, 끊기면 폴링) |
 | `src/layout.js` | dagre 자동 배치 (서비스별로 묶기) |
 | `src/pages/` | 페이지 |
 | `src/components/` | 노드, 표, 차트 같은 부품 |

@@ -5,7 +5,7 @@
 MSDF (Micro Service Data Flow) is a Python framework that lets microservices exchange data **without knowing about each other**.
 A service only asks for a result by name ("I need this"); which services produce it, and in what order, is decided by a configuration file (a DAG).
 
-> Current version: **0.1.0**. Runs on one machine as an engine plus several service processes. Not on PyPI yet ([Installation](installation.md)).
+> Current version: **0.2.0**. Runs on one machine as an engine plus several service processes. Not on PyPI yet ([Installation](installation.md)).
 > What is done and what is left is in the [roadmap](roadmap.md).
 >
 > CLI output, error messages and the web UI are currently in Korean.
@@ -34,10 +34,12 @@ def app(day: str):
     order("daily_stats", params={"day": day})   # returns immediately
 
 @action(inputs=["stats"])
-def on_stats(stats): ...                         # woken up when the result arrives
+def on_stats(stats):                             # woken up when the result arrives
+    print("result:", stats)
 
 @action
-def on_stats_failed(status: str): ...            # woken up on final failure
+def on_stats_failed(status: str):                # woken up on final failure
+    print("failed:", status)
 ```
 
 ```yaml

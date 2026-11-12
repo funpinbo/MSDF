@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hmac
 import logging
 import time
 from collections.abc import Callable
@@ -17,8 +18,8 @@ from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
 import httpx
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, Response
 
 from ms_dataflow.errors import OrderError, PermissionDenied, ServiceUnavailable
 from ms_dataflow.execute.engine import Engine
@@ -42,6 +43,16 @@ log = logging.getLogger("msdf.scheduler")
 T = TypeVar("T")
 
 
+def token_ok(request: Any, token: str) -> bool:
+    """Authorization: Bearer, X-MSDF-Token 헤더, 또는 ?token= (EventSource용) 중 하나."""
+    got = request.headers.get("x-msdf-token") or ""
+    auth = request.headers.get("authorization") or ""
+    if auth.lower().startswith("bearer "):
+        got = auth[7:].strip()
+    got = got or request.query_params.get("token") or ""
+    return hmac.compare_digest(got.encode(), token.encode())
+
+
 @dataclass
 class Instance:
     id: str
@@ -60,6 +71,7 @@ class Scheduler:
     project: Project
     store: Store
     settings: Settings = field(default_factory=Settings)
+    token: str | None = None  # 있으면 모든 API(서비스·UI)가 이 값을 보내야 한다
 
     def __post_init__(self) -> None:
         self.engine = Engine(
@@ -78,6 +90,7 @@ class Scheduler:
         self._rr = 0
         self.extensions: dict[str, Any] = {}
         self.logs = LogBuffer()
+        self.version = 0  # 상태가 바뀔 때마다 오른다. UI 스트림(SSE)이 본다
 
     # --- 공통 ---------------------------------------------------------------
     async def db(self, fn: Callable[..., T], *args: Any) -> T:
@@ -85,6 +98,7 @@ class Scheduler:
         return await loop.run_in_executor(self._db, fn, *args)
 
     def kick(self) -> None:
+        self.version += 1
         if self._wake is not None:
             self._wake.set()
 
@@ -168,6 +182,7 @@ class Scheduler:
     def drop(self, instance_id: str) -> None:
         inst = self.instances.pop(instance_id, None)
         if inst is not None:
+            self.version += 1
             log.info("해제: %s", instance_id)
             self._refresh_available()
 
@@ -261,7 +276,10 @@ class Scheduler:
             if msdf_log.level == logging.NOTSET or msdf_log.level > logging.INFO:
                 msdf_log.setLevel(logging.INFO)
             sched._wake = asyncio.Event()
-            sched._http = httpx.AsyncClient(headers={"Content-Type": "application/json"})
+            headers = {"Content-Type": "application/json"}
+            if sched.token:
+                headers["Authorization"] = f"Bearer {sched.token}"
+            sched._http = httpx.AsyncClient(headers=headers)
             async with asyncio.TaskGroup() as tg:
                 loops = [tg.create_task(sched.dispatch_loop()), tg.create_task(sched.reaper_loop())]
                 try:
@@ -273,6 +291,19 @@ class Scheduler:
             msdf_log.removeHandler(sched.logs)
 
         app = FastAPI(title="MSDF", lifespan=lifespan)
+        app.state.sched = sched
+
+        @app.middleware("http")
+        async def auth(request: Request, call_next: Any) -> Response:
+            path = request.url.path
+            public = path in ("/", "/ui", "/health") or path.startswith("/ui/")
+            if sched.token and not public and not token_ok(request, sched.token):
+                return JSONResponse(
+                    {"detail": {"code": "unauthorized", "message": "엔진 토큰이 필요합니다"}},
+                    status_code=401,
+                )
+            resp: Response = await call_next(request)
+            return resp
 
         @app.exception_handler(OrderError)
         async def order_error(_: Any, exc: OrderError) -> JSONResponse:

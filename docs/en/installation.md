@@ -81,23 +81,23 @@ pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git"
 To pin a version, append a tag or commit.
 
 ```bash
-pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.1.0"
+pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.2.0"
 ```
 
 In a dependency file:
 
 ```text
 # requirements.txt
-msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.1.0
+msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.2.0
 ```
 
 ```toml
 # pyproject.toml
 [project]
-dependencies = ["msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.1.0"]
+dependencies = ["msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.2.0"]
 ```
 
-With uv: `uv add "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git" --tag v0.1.0`.
+With uv: `uv add "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git" --tag v0.2.0`.
 
 **Installing from a git URL does not include the built web UI** (the repository does not contain build output). To run the engine and the UI
 from such an install, clone the repository, build the UI once, and point to that folder.
@@ -117,13 +117,13 @@ For servers without internet or git access, build a wheel file and copy it over.
 cd MSDF
 (cd frontend && npm install && npm run build)
 uv build --wheel                   # or: pip install build && python -m build --wheel
-ls dist/                           # msdf-0.1.0-py3-none-any.whl
+ls dist/                           # msdf-0.2.0-py3-none-any.whl
 ```
 
 On the target machine:
 
 ```bash
-pip install "msdf-0.1.0-py3-none-any.whl[server]"
+pip install "msdf-0.2.0-py3-none-any.whl[server]"
 ```
 
 > The wheel contains the built code of the libraries the UI uses: Vue, vue-router, Vue Flow (which includes VueUse) and dagre are MIT;
@@ -152,4 +152,5 @@ It is safest for the engine and all services to use **the same version**. Use th
 | `npm run build` fails with a Node version error | Node.js 20.19+ or 22.12+ |
 | `http://127.0.0.1:8787/ui` does not open in the browser | ① Is `msdf up` running? (`run_local.py` has no web UI.) ② If the engine runs on a remote server or VM, `127.0.0.1` means that machine itself. Open a tunnel from your computer with `ssh -L 8787:127.0.0.1:8787 user@server`, then open `http://127.0.0.1:8787/ui`. On a trusted network you can also start `msdf up --host 0.0.0.0` and open `http://server-address:8787/ui` (allow port 8787 in the firewall). ③ If the page is blank, check that you ran `npm run build` in `frontend` |
 | `start()` hangs while "waiting for the engine" | Is `msdf up` running, and is the address right (`MSDF_SCHEDULER`)? |
-| The engine says the DB was "created with schema v1" | During 0.x the DB is not migrated automatically. Delete `.msdf/msdf.db` and restart (only the cache and run history are lost) |
+| The engine refuses to start because the DB was "created by a newer MSDF" | A `.msdf/msdf.db` made by a newer MSDF was opened by an older one. Match the versions, or delete the DB and restart (only the cache and run history are lost). Older DBs are migrated automatically at startup, leaving a `msdf.db.v<n>.bak` backup |
+| A service stops with "the engine requires a token", or the web UI asks for a token | The engine was started with `--token` or `MSDF_TOKEN`. Give services the same `MSDF_TOKEN` and enter the same value in the UI |

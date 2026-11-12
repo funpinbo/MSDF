@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
 import warnings
@@ -12,7 +13,15 @@ from pathlib import Path
 
 from ms_dataflow.errors import ConfigError
 
+log = logging.getLogger("msdf.store")
+
 SCHEMA_VERSION = 2
+
+# 버전 n의 DB를 n+1로 올리는 SQL. 표와 인덱스 생성은 schema.sql이 (IF NOT EXISTS로) 맡으므로
+# 여기에는 기존 표를 바꾸는 문장만 둔다.
+MIGRATIONS: dict[int, str] = {
+    1: "ALTER TABLE run ADD COLUMN plan TEXT;",
+}
 _MIN_SQLITE = (3, 35, 0)
 _COLD_SCHEMA = """
 CREATE TABLE IF NOT EXISTS cold.artifact AS SELECT * FROM main.artifact WHERE 0;
@@ -65,14 +74,46 @@ class Store:
         if current == 0 and not has_tables:
             self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             return
-        if current != SCHEMA_VERSION:
+        if current == SCHEMA_VERSION:
+            return
+        if current > SCHEMA_VERSION or any(
+            v not in MIGRATIONS for v in range(current, SCHEMA_VERSION)
+        ):
             raise ConfigError(
-                f"이 DB는 스키마 v{current}로 만들어졌고 현재 버전은 v{SCHEMA_VERSION}입니다.\n"
-                "  0.x 동안은 자동 변환을 제공하지 않습니다.",
+                f"이 DB는 스키마 v{current}로 만들어졌고, 이 MSDF는 v{SCHEMA_VERSION}을 씁니다.\n"
+                "  자동으로 변환할 수 없습니다"
+                + (" (더 새 버전의 MSDF가 만든 DB입니다)." if current > SCHEMA_VERSION else "."),
                 file=self.path,
-                fix=f"{self.path}를 지우고 다시 시작하세요. (캐시와 실행 이력만 사라지며, "
-                "Resolver가 저장한 실제 데이터는 영향을 받지 않습니다.)",
+                fix=f"MSDF 버전을 맞추거나, {self.path}를 지우고 다시 시작하세요. (캐시와 실행 "
+                "이력만 사라지며, Resolver가 저장한 실제 데이터는 영향을 받지 않습니다.)",
             )
+        self._migrate(current)
+
+    def _migrate(self, current: int) -> None:
+        """v{current} → v{SCHEMA_VERSION}. 파일 DB면 먼저 백업을 남긴다."""
+        if self.path != ":memory:":
+            backup = f"{self.path}.v{current}.bak"
+            dst = sqlite3.connect(backup)
+            try:
+                self.conn.backup(dst)
+            finally:
+                dst.close()
+            log.warning(
+                "MSDF: DB 스키마를 v%d → v%d로 변환합니다 (백업: %s)",
+                current,
+                SCHEMA_VERSION,
+                backup,
+            )
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            for v in range(current, SCHEMA_VERSION):
+                for stmt in filter(None, (x.strip() for x in MIGRATIONS[v].split(";"))):
+                    self.conn.execute(stmt)
+            self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        except BaseException:
+            self.conn.execute("ROLLBACK")
+            raise
+        self.conn.execute("COMMIT")
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:

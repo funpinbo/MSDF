@@ -89,6 +89,7 @@ queued → leased → running → saved → done
 | Input data disappeared from storage | the data is marked "lost" and the run is re-planned (up to 3 times) |
 | Several services request the same result at once | computed once, delivered once per request |
 | The engine restarts | step states are in the DB, so work continues once services register again |
+| Someone cancels a run (UI, `msdf cancel`) | steps used only by that run are stopped as `cancelled` and `on_fail` gets `"cancelled"`. Steps other runs have joined keep running. A step already running in a service finishes, but its result is discarded. The run's status is `cancelled` |
 
 ## Retention
 
@@ -114,7 +115,9 @@ The engine keeps metadata in a SQLite file (`.msdf/msdf.db`).
 
 - **Only one dedicated engine thread writes to the DB.** Services do not read the queue themselves; the engine pushes work to them, so SQLite's concurrent-write problems do not arise.
 - WAL mode lets the UI read state while the engine writes.
-- During 0.x, if the DB structure changes between versions it is not migrated automatically; you are told to delete `.msdf/msdf.db`.
+- When a new MSDF version changes the DB structure, the DB is **migrated automatically** at startup, after a backup `msdf.db.v<old version>.bak`
+  is written. A DB created by a newer MSDF is refused.
+- Code analysis results are kept per file in `.msdf/scan.cache`, so unchanged files are not re-read (`--no-cache` turns it off).
   That file holds only the cache and run history, so the actual data in your storage is unaffected.
 
 ## Performance
@@ -133,10 +136,14 @@ Served with `msdf up` at `http://127.0.0.1:8787/ui`. It is a Vue app, and only i
 
 | Page | Contents |
 | --- | --- |
-| Live map | All registered Actions, grouped by service, on one graph. Each node shows done, failed, cached and running counts, success rate and average time; each edge shows how much data moved. Refreshed every 2 seconds; running flows are animated. Summary cards at the top: run success rate, failed steps, cache hit rate and more |
+| Live map | All registered Actions, grouped by service, on one graph. Each node shows done, failed, cached and running counts, success rate and average time; each edge shows how much data moved. Refreshed live; running flows are animated. Summary cards at the top: run success rate, failed steps, cache hit rate and more |
 | DAG editor | Drag an Action from the list onto the canvas to create a node, and drag from an output dot to an input dot to connect. Pick the result slot with ☆, and set node options and deliveries in the right panel. The engine validates every change; saving writes `dags/<order>.yaml` and applies it to the engine immediately. Node positions are kept in the YAML's `layout` |
 | Logs | Tabs for runs, steps, services, DAGs and the engine log. Filter by service, DAG, status and search text; click a step to see the error text and the lineage of its input and output data |
-| Run detail | One run's DAG graph (with cache, joined and failed marks), step timeline, failure location and the lineage of the result data |
+| Run detail | One run's DAG graph (with cache, joined and failed marks), step timeline, failure location and the lineage of the result data. **Cancel run** while it is running |
+| Permissions | Edit, validate and save IAM layers and rules as tables. Try a permission |
+
+The pages re-read data only when the engine sends a change signal over `/api/stream` (Server-Sent Events). If the signal is lost they fall back
+to reading every 2 seconds, and the indicator at the top changes from "실시간" (live) to "폴링" (polling).
 
 The same information is available as a JSON API.
 
@@ -150,3 +157,6 @@ The same information is available as a JSON API.
 | `GET /api/steps` | step log (filter by service, order, status, run_id, q) |
 | `GET /api/events` | engine log (latest 3000 lines) |
 | `GET /api/artifacts/{artifact_id}` | data lineage (both hot and cold) |
+| `POST /api/runs/{run_id}/cancel` | cancel a running run |
+| `GET /api/iam`, `POST /api/iam/validate`, `PUT /api/iam`, `POST /api/iam/try` | read, validate, save IAM; try a permission |
+| `GET /api/stream` | change signals (Server-Sent Events) |

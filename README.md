@@ -13,8 +13,8 @@ MSA 환경에서 **서비스끼리 서로를 몰라도 데이터를 주고받게
 결과를 어디에 두고 실패하면 어떻게 할지"까지 떠안게 됩니다. 게다가 챗봇은 데이터를 많이 바꿉니다. MSDF는 이 지휘 역할을 기능 밖으로 꺼내,
 기능들이 서로를 모른 채 데이터 변화에 따라 움직이게 합니다. 그래서 기능을 더하거나 뺄 때 DAG만 고치면 됩니다. → [만든 이유](docs/background.md)
 
-> 현재 버전 **0.1.0**: 한 머신에서 엔진과 여러 서비스 프로세스로 동작합니다. 아직 PyPI에는 없으며 [저장소나 git 주소로 설치](docs/installation.md)합니다.
-> 남은 일은 [로드맵](docs/roadmap.md)에 있습니다.
+> 현재 버전 **0.2.0**: 한 머신에서 엔진과 여러 서비스 프로세스로 동작합니다. 아직 PyPI에는 없으며 [저장소나 git 주소로 설치](docs/installation.md)합니다.
+> 바뀐 점은 [변경 기록](CHANGELOG.md), 남은 일은 [로드맵](docs/roadmap.md)에 있습니다.
 
 ## 빠르게 돌려 보기
 
@@ -38,10 +38,12 @@ def app(day: str):
     order("daily_stats", params={"day": day})   # 즉시 반환, 결과를 기다리지 않는다
 
 @action(inputs=["stats"])
-def on_stats(stats): ...                         # DAG의 on_success가 가리킨다
+def on_stats(stats):                             # DAG의 on_success가 가리킨다
+    print("결과:", stats)
 
 @action
-def on_stats_failed(status: str): ...            # DAG의 on_fail이 가리킨다
+def on_stats_failed(status: str):                # DAG의 on_fail이 가리킨다 ("failed" | "cancelled")
+    print("실패:", status)
 
 if __name__ == "__main__":
     start()        # 엔진에 붙는다 (바로 반환)
@@ -52,8 +54,7 @@ if __name__ == "__main__":
 # transform.py — 자기 일만 선언한다
 from ms_dataflow import action, service, start
 
-@service("transform")
-def transform(): ...
+service("transform")
 
 @action(inputs=["rows"], outputs=["clean"], retries=2)
 def clean(rows): return [r for r in rows if r["value"] is not None]
@@ -179,7 +180,8 @@ npm run build        # 결과: ms_dataflow/ui/dist
 | --- | --- |
 | 실시간 맵 | 서비스·Action·데이터 흐름을 한 장의 그래프로, 성공·실패·캐시 수치와 함께 |
 | DAG 편집기 | n8n처럼 Action 노드를 끌어다 놓고 연결해 DAG를 만들고 저장 |
-| 로그 | 실행, 단계, 서비스, DAG, 엔진 로그를 나눠서 조회. 실패 원인과 데이터 계보 |
+| 로그 | 실행, 단계, 서비스, DAG, 엔진 로그를 나눠서 조회. 실패 원인과 데이터 계보. 진행 중인 실행 취소 |
+| 권한 | IAM 계층과 규칙을 표로 편집하고 저장. 통과 여부를 미리 시험 |
 
 ## 개발
 
@@ -194,8 +196,10 @@ uv run mypy ms_dataflow
 
 ## 보안
 
-엔진 API(`/api`, `/order` 등)와 웹 UI에는 **인증이 없습니다.** 기본으로 `127.0.0.1`에만 열리며, 다른 주소(`--host 0.0.0.0`)로 열 때는
-믿을 수 있는 네트워크 안에서만 쓰세요. 웹 UI의 DAG 편집기는 엔진 머신의 `dags/` 파일을 고칠 수 있습니다.
+엔진은 기본으로 `127.0.0.1`에만, 인증 없이 열립니다. 다른 컴퓨터에서 접근하게 열 때(`--host 0.0.0.0`)는 **토큰을 쓰세요**:
+`msdf up --token 비밀값`(또는 `MSDF_TOKEN`). 그러면 서비스, 웹 UI, CLI가 모두 같은 값을 보내야 합니다([설정 › 엔진 토큰](docs/configuration.md#엔진-토큰)).
+토큰은 통신을 암호화하지 않으므로 믿을 수 없는 네트워크에서는 HTTPS 프록시나 SSH 터널 뒤에 두세요. 웹 UI의 DAG 편집기와 권한 화면은
+엔진 머신의 `dags/`, `iam.yaml` 파일을 고칠 수 있습니다.
 
 ## 라이선스
 

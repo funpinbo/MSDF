@@ -98,6 +98,8 @@ Stop `embedding.py` with Ctrl+C while it is working and start it again: the step
 
 The example is "read a day's data (`source`) → clean and aggregate it (`transform`) → return it to whoever asked (`app`)".
 
+> **Shortcut**: `msdf init my_project` creates files laid out like the ones below (iam.yaml included). Then `cd my_project` and skip to [Run](#run).
+
 ### Project layout
 
 ```text
@@ -122,8 +124,7 @@ Each service declares only its own work. `inputs`, `outputs` and `params` are na
 # source.py
 from ms_dataflow import action, service, start
 
-@service("source")
-def source(): ...
+service("source")
 
 @action(params=["day"], outputs=["rows"], fresh_for="1h")
 def load(day: str) -> list:
@@ -138,8 +139,7 @@ if __name__ == "__main__":
 # transform.py
 from ms_dataflow import action, service, start
 
-@service("transform")
-def transform(): ...
+service("transform")
 
 @action(inputs=["rows"], outputs=["clean"], retries=2)
 def clean(rows: list) -> list:
@@ -237,7 +237,7 @@ If the engine runs on another address, tell the services with `start("http://hos
 
 ### Check
 
-- See the flow, the counts and the logs at `http://127.0.0.1:8787/ui`.
+- See the flow, the counts and the logs at `http://127.0.0.1:8787/ui`. From a terminal: `msdf status`, `msdf runs`.
 - **Request the same day again** and the stored result comes back without re-running the three steps (`load` for one hour).
 - Change the logic of `summarize` and restart `transform.py`: the results of `load` and `clean` are reused and computation restarts at `summarize`.
   Changing only comments or whitespace is not treated as a logic change.

@@ -8,4 +8,4 @@ from ms_dataflow.client import start
 from ms_dataflow.decorators import action, context, delete, order, service
 
 __all__ = ["service", "action", "order", "start", "context", "delete"]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

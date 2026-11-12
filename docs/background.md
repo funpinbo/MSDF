@@ -68,11 +68,11 @@ def answer(question):
 
 ```python
 # translate.py — 새 서비스. 자기 일만 선언한다
-@service("translate")
-def translate(): ...
+service("translate")
 
 @action(inputs=["docs"], outputs=["out"])
-def to_korean(docs): ...
+def to_korean(docs):
+    return [translate_text(d, target="ko") for d in docs]   # 쓰는 번역 라이브러리 호출
 ```
 
 ```yaml

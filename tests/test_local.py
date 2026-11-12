@@ -179,3 +179,31 @@ def test_error_shows_only_user_frames(calc, monkeypatch):
         err = r.engine.steps(r.last.run_id)[2]["error"]
         assert "mid.py" in err and "실패 주입" in err
         assert "runner.py" not in err
+
+
+def test_cancel_run_delivers_cancelled(calc):
+    with LocalRunner(calc) as r:
+        r.order("number", {"n": 21}, requester="req")
+        run_id = r.last.run_id
+        r.step_once()  # make만 실행
+        out = r.engine.cancel(run_id)
+        assert out["ok"] and out["cancelled"] >= 1
+        r.run_until_idle()
+        run = r.engine.run(run_id)
+        assert run["status"] == "cancelled"
+        assert run["finished_at"] is not None
+        assert ("on_fail", "cancelled") in read_log(calc)
+        assert r.engine.cancel(run_id)["ok"] is False  # 두 번째는 아무 일 없음
+
+
+def test_cancel_keeps_steps_shared_with_other_runs(calc):
+    with LocalRunner(calc) as r:
+        r.order("number", {"n": 22}, requester="req")
+        first = r.last.run_id
+        r.order("number", {"n": 22}, requester="req")  # 진행 중 단계에 합류
+        second = r.last.run_id
+        out = r.engine.cancel(first)
+        assert out["kept"] >= 1
+        r.run_until_idle()
+        assert r.engine.run(second)["status"] == "done"
+        assert r.engine.run(first)["status"] == "cancelled"

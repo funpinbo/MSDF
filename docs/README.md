@@ -5,7 +5,7 @@
 MSDF(Micro Service Data Flow)는 마이크로서비스끼리 **서로를 몰라도** 데이터를 주고받게 해 주는 파이썬 프레임워크입니다.
 서비스는 "이런 결과물이 필요하다"고 이름으로 요청만 하고, 그 결과물을 어느 서비스가 어떤 순서로 만드는지는 설정 파일(DAG)이 정합니다.
 
-> 현재 버전: **0.1.0**. 한 머신에서 엔진과 여러 서비스 프로세스로 동작합니다. 아직 PyPI에는 없습니다([설치](installation.md)).
+> 현재 버전: **0.2.0**. 한 머신에서 엔진과 여러 서비스 프로세스로 동작합니다. 아직 PyPI에는 없습니다([설치](installation.md)).
 > 무엇이 되고 무엇이 남았는지는 [로드맵](roadmap.md)에 있습니다.
 
 ## 읽는 순서
@@ -32,10 +32,12 @@ def app(day: str):
     order("daily_stats", params={"day": day})   # 즉시 반환
 
 @action(inputs=["stats"])
-def on_stats(stats): ...                         # 결과가 도착하면 깨워진다
+def on_stats(stats):                             # 결과가 도착하면 깨워진다
+    print("결과:", stats)
 
 @action
-def on_stats_failed(status: str): ...            # 최종 실패하면 깨워진다
+def on_stats_failed(status: str):                # 최종 실패하면 깨워진다
+    print("실패:", status)
 ```
 
 ```yaml

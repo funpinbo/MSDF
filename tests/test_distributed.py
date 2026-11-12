@@ -99,10 +99,9 @@ def wait_for(cond: Callable[[], bool], timeout: float = 20) -> None:
     raise AssertionError("시간 안에 조건이 맞지 않았습니다")
 
 
-@pytest.fixture
-def cluster(calc) -> Iterator[Cluster]:
+def _cluster(calc: Path, token: str | None = None) -> Iterator[Cluster]:
     project = load_project(calc)
-    app = build_app(project, str(calc / ".msdf" / "msdf.db"), FAST, ui=False)
+    app = build_app(project, str(calc / ".msdf" / "msdf.db"), FAST, ui=False, token=token)
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     t = threading.Thread(target=server.run, daemon=True)
@@ -113,6 +112,16 @@ def cluster(calc) -> Iterator[Cluster]:
     c.close()
     server.should_exit = True
     t.join(5)
+
+
+@pytest.fixture
+def cluster(calc) -> Iterator[Cluster]:
+    yield from _cluster(calc)
+
+
+@pytest.fixture
+def secured(calc) -> Iterator[Cluster]:
+    yield from _cluster(calc, token="tok-123")
 
 
 def events(root):
@@ -172,3 +181,15 @@ def test_two_instances_share_work(cluster):
     wait_for(lambda: events(cluster.root).count("on_done") == 4)
     values = sorted(v["value"] for e, v in read_log(cluster.root) if e == "on_done")
     assert values == [4, 6, 8, 10]
+
+
+def test_token_required_between_engine_and_services(secured):
+    secured.service("src", MSDF_TOKEN="tok-123")
+    secured.service("mid", MSDF_TOKEN="tok-123")
+    secured.wait_started("src", "mid")
+    secured.service("req", MSDF_TOKEN="tok-123", TRIGGER="4")
+    secured.service("req", name="intruder")  # 토큰 없음
+    wait_for(lambda: ("on_done", {"value": 10}) in read_log(secured.root))
+    wait_for(lambda: any(e == "start_error" for e, _ in read_log(secured.root)))
+    errors = [v for e, v in read_log(secured.root) if e == "start_error"]
+    assert "토큰" in errors[0]

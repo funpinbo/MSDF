@@ -14,8 +14,8 @@ the chatbot ends up owning "what to call, in which order, where to keep the resu
 a lot of data. MSDF moves that conductor role out of the features, so they run on data changes without knowing about each other.
 Adding or removing a feature then means editing only the DAG. → [Why MSDF](docs/en/background.md)
 
-> Current version **0.1.0**: runs on one machine as an engine plus several service processes. It is not on PyPI yet;
-> [install it from the repository or a git URL](docs/en/installation.md). Remaining work is in the [roadmap](docs/en/roadmap.md).
+> Current version **0.2.0**: runs on one machine as an engine plus several service processes. It is not on PyPI yet;
+> [install it from the repository or a git URL](docs/en/installation.md). What changed is in the [changelog](CHANGELOG.en.md); remaining work is in the [roadmap](docs/en/roadmap.md).
 >
 > CLI output, error messages and the web UI are currently in Korean. The bundled example uses Korean sample data.
 
@@ -42,10 +42,12 @@ def app(day: str):
     order("daily_stats", params={"day": day})   # returns immediately, does not wait for the result
 
 @action(inputs=["stats"])
-def on_stats(stats): ...                         # the DAG's on_success points here
+def on_stats(stats):                             # the DAG's on_success points here
+    print("result:", stats)
 
 @action
-def on_stats_failed(status: str): ...            # the DAG's on_fail points here
+def on_stats_failed(status: str):                # the DAG's on_fail points here ("failed" | "cancelled")
+    print("failed:", status)
 
 if __name__ == "__main__":
     start()        # attaches to the engine (returns immediately)
@@ -56,8 +58,7 @@ if __name__ == "__main__":
 # transform.py — declares only its own work
 from ms_dataflow import action, service, start
 
-@service("transform")
-def transform(): ...
+service("transform")
 
 @action(inputs=["rows"], outputs=["clean"], retries=2)
 def clean(rows): return [r for r in rows if r["value"] is not None]
@@ -184,7 +185,8 @@ with `msdf up --ui-dist PATH`. See [frontend/README.en.md](frontend/README.en.md
 | --- | --- |
 | Live map | Services, Actions and data flow on one graph, with success, failure and cache counts |
 | DAG editor | Build and save DAGs n8n-style by dragging Action nodes onto a canvas and connecting them |
-| Logs | Runs, steps, services, DAGs and engine logs, each on its own tab. Failure causes and data lineage |
+| Logs | Runs, steps, services, DAGs and engine logs, each on its own tab. Failure causes and data lineage. Cancel a running run |
+| Permissions | Edit and save IAM layers and rules as tables. Try whether a request would pass |
 
 ## Development
 
@@ -199,8 +201,10 @@ See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) for how to contribute.
 
 ## Security
 
-The engine API (`/api`, `/order`, …) and the web UI have **no authentication.** By default they listen only on `127.0.0.1`; if you open them on
-another address (`--host 0.0.0.0`), use them only inside a trusted network. The web UI's DAG editor can modify the `dags/` files on the engine machine.
+By default the engine listens only on `127.0.0.1`, without authentication. When you open it to other machines (`--host 0.0.0.0`), **use a token**:
+`msdf up --token SECRET` (or `MSDF_TOKEN`). Services, the web UI and the CLI must then all send the same value ([Configuration › Engine token](docs/en/configuration.md#engine-token)).
+The token does not encrypt traffic, so on an untrusted network put the engine behind an HTTPS proxy or an SSH tunnel. The web UI's DAG editor and
+Permissions page can modify the `dags/` and `iam.yaml` files on the engine machine.
 
 ## License
 

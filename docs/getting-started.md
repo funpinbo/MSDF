@@ -94,6 +94,8 @@ uv run python chatbot.py        # 터미널 5 — 질문을 입력한다
 
 예시는 "하루치 데이터를 읽어(`source`) → 정리하고 집계해(`transform`) → 요청한 쪽(`app`)에 돌려준다"입니다.
 
+> **빠른 길**: `msdf init my_project`가 아래와 같은 구성의 파일을 만들어 줍니다(iam.yaml 포함). 만든 뒤 `cd my_project`에서 [실행](#실행)으로 건너뛰어도 됩니다.
+
 ### 프로젝트 구조
 
 ```text
@@ -117,8 +119,7 @@ MSDF 설치는 [설치](installation.md)를 보세요. 이 프로젝트가 별�
 # source.py
 from ms_dataflow import action, service, start
 
-@service("source")
-def source(): ...
+service("source")
 
 @action(params=["day"], outputs=["rows"], fresh_for="1h")
 def load(day: str) -> list:
@@ -133,8 +134,7 @@ if __name__ == "__main__":
 # transform.py
 from ms_dataflow import action, service, start
 
-@service("transform")
-def transform(): ...
+service("transform")
 
 @action(inputs=["rows"], outputs=["clean"], retries=2)
 def clean(rows: list) -> list:
@@ -231,7 +231,7 @@ python app.py            # 터미널 4
 
 ### 확인
 
-- `http://127.0.0.1:8787/ui`에서 흐름과 수치, 로그를 봅니다.
+- `http://127.0.0.1:8787/ui`에서 흐름과 수치, 로그를 봅니다. 터미널에서는 `msdf status`, `msdf runs`.
 - **같은 날짜로 다시 요청하면** 세 단계를 다시 하지 않고 저장된 결과를 바로 돌려줍니다(`load`는 1시간 동안).
 - `summarize` 함수의 로직을 고치고 `transform.py`를 다시 띄우면, `load`와 `clean` 결과는 재사용하고 `summarize`부터 다시 계산합니다. 주석이나 공백만 바꾼 것은 로직 변경으로 보지 않습니다.
 - 실행 중에 `transform.py`를 죽이고 다시 띄우면, 하던 단계가 다시 배정되어 이어집니다.

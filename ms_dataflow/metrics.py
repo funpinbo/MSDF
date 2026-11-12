@@ -181,6 +181,7 @@ def overview(
         "runs_done": sum(1 for r in runs if r["status"] == "done"),
         "runs_failed": sum(1 for r in runs if r["status"] == "failed"),
         "runs_running": sum(1 for r in runs if r["status"] == "running"),
+        "runs_cancelled": sum(1 for r in runs if r["status"] == "cancelled"),
         "steps_done": sum(a["done"] for a in actions.values()),
         "steps_failed": sum(a["failed"] for a in actions.values()),
         "steps_running": sum(a["running"] for a in actions.values()),

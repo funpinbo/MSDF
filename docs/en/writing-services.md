@@ -19,15 +19,22 @@ from ms_dataflow import service, action, order, start, context, delete
 
 Your service code never contains other services' names, database types, storage locations or data IDs. If it does, something is being used the wrong way.
 
-## `@service`
+## `service()` / `@service`
+
+There are two ways to declare a service; both mean the same thing.
 
 ```python
-@service("app")
-def app(day: str): ...
+service("transform")       # one line at module level. For a service with no entry function (it only provides Actions)
 ```
 
-- Put it on the one function that runs the whole service. It must be a module-level function.
-- Starting from the file that holds this function, every `@action` found **by following imports within the project** belongs to this service.
+```python
+@service("app")            # if the service has a function that runs it, put the decorator on that function
+def app(day: str):
+    order("daily_stats", params={"day": day})
+```
+
+- One per file, at module level only. The name must be a string literal (the code is read, not executed).
+- Starting from the file that declares it, every `@action` found **by following imports within the project** belongs to this service.
   You do not declare ownership on Actions.
 - Imports inside functions are followed too. `if TYPE_CHECKING:` blocks are skipped, and dynamic imports such as `importlib.import_module`
   are not followed (a warning is shown).
@@ -46,14 +53,16 @@ def app(day: str): ...
     retry_delay=0.0,        # delay between retries (seconds). Doubles on each attempt
     fresh_for=None,         # "30m", "1h", "1d", … Cached forever if omitted
 )
-def clean(rows): ...
+def clean(rows):
+    return [r for r in rows if r["value"] is not None]
 ```
 
 With nothing to declare, the parentheses can be dropped.
 
 ```python
 @action
-def on_stats_failed(status: str): ...
+def on_stats_failed(status: str):
+    print("failed:", status)
 ```
 
 - Only on module-level functions.
@@ -85,8 +94,12 @@ def summarize(rows) -> tuple[dict, list]:
 ### Version
 
 - Without `version`, the version is derived from the function source. Changing the logic creates a new version, and computation restarts at that step.
+- **Functions, classes and module constants in your project** that the Action uses are part of the version too, whether they are in the same file
+  or imported with `from util import normalize` or `import util`, including whatever they call in turn. Changing one helper gives a new version
+  only to the Actions that use it.
 - Changes to comments, whitespace, line breaks, docstrings or decorator options keep the same version.
-- Changes in **other functions** that the Action calls are not detected. In that case bump it yourself, e.g. `version="2"`.
+- Version changes of installed packages (pandas, …) are not tracked, and neither are functions picked dynamically (`getattr`, a function taken
+  from a dict). In those cases bump it yourself, e.g. `version="2"`. If you give `version`, only that value is used.
 - A DAG file cannot override `version`.
 
 ### Freshness
@@ -123,8 +136,8 @@ try:
     order("daily_stats", params={"day": day})
 except PermissionDenied as e:
     print("permission denied:", e.blocked)
-except OrderError:
-    ...
+except OrderError as e:
+    print("order failed:", e)
 ```
 
 ## `start()`
@@ -146,6 +159,7 @@ if __name__ == "__main__":
   step requests, then **returns immediately**.
 - The port is picked automatically. Run the same service several times and the engine hands work to whichever instance is idle.
 - The engine address is taken from the argument → the `MSDF_SCHEDULER` environment variable → `http://127.0.0.1:8787`, in that order.
+- If the engine was started with a token (`msdf up --token`), pass the same value with `token=` or the `MSDF_TOKEN` environment variable. A wrong one raises `RegistrationError`.
 - If the engine is not up yet, it keeps retrying. With `start(required=False)` it only warns and keeps trying in the background. `timeout=` seconds limits the wait.
 - If a service with the same name is already registered with **different code**, it raises `RegistrationError`. Stop the old process and start again.
 - Unregisters when the process ends.
@@ -159,6 +173,7 @@ if __name__ == "__main__":
 | `root` | folder of the calling file | project folder where code analysis starts |
 | `timeout` | none | maximum time to wait for the engine (seconds) |
 | `block` | `False` | if `True`, does not return and waits until Ctrl+C or SIGTERM. For services that only provide Actions |
+| `token` | `MSDF_TOKEN` | engine token (same value as `msdf up --token`) |
 
 ## `@context`
 
@@ -179,7 +194,7 @@ def who() -> dict:
 
 ```python
 key = order("daily_stats", params={"day": day})
-...
+# ... once you are done with the result
 delete(key)                 # delete that result
 delete(key, cascade=True)   # also delete data produced from it
 ```
@@ -195,7 +210,8 @@ Put the logic in a plain module without `@action`, and give each service its own
 
 ```python
 # common/cleaning.py   (no @action; any service may import it)
-def drop_empty(rows): ...
+def drop_empty(rows):
+    return [r for r in rows if r["value"] is not None]
 
 # transform.py
 @action(inputs=["rows"], outputs=["clean"])

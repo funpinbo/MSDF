@@ -2,15 +2,22 @@
 
 - ``msdf up``: 설정을 읽고 검증한 뒤 엔진(Scheduler + DB + 웹 UI)을 띄운다. 서비스는 띄우지 않는다.
 - ``msdf check``: 설정과 코드만 검증하고 끝낸다.
+- ``msdf init``: 새 프로젝트 뼈대를 만든다.
+- ``msdf status`` / ``msdf runs`` / ``msdf cancel``: 떠 있는 엔진에 묻는다.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
+from typing import Any
 
 from ms_dataflow import __version__
 from ms_dataflow.errors import LoadError
@@ -21,7 +28,10 @@ from ms_dataflow.project import Project, load_project
 def _load(args: argparse.Namespace) -> Project | None:
     try:
         project = load_project(
-            args.root, config_dir=args.config, strict_services=not args.allow_external
+            args.root,
+            config_dir=args.config,
+            strict_services=not args.allow_external,
+            cache=not args.no_cache,
         )
     except LoadError as e:
         print(e.render(), file=sys.stderr)
@@ -40,11 +50,13 @@ def _summary(project: Project) -> str:
     )
 
 
-def build_app(project: Project, db: str, settings: Settings, *, ui: bool = True) -> object:
+def build_app(
+    project: Project, db: str, settings: Settings, *, ui: bool = True, token: str | None = None
+) -> object:
     from ms_dataflow.execute.scheduler import Scheduler
     from ms_dataflow.store import Store
 
-    sched = Scheduler(project, Store(db), settings)
+    sched = Scheduler(project, Store(db), settings, token=token)
     if ui:
         from ms_dataflow.ui import install as install_ui
 
@@ -66,8 +78,9 @@ def cmd_up(args: argparse.Namespace) -> int:
     db = args.db or str(Path(args.config or args.root) / ".msdf" / "msdf.db")
     if args.ui_dist:
         os.environ["MSDF_UI_DIST"] = str(Path(args.ui_dist).resolve())
+    token = args.token or os.environ.get("MSDF_TOKEN") or None
     try:
-        app = build_app(project, db, settings, ui=not args.no_ui)
+        app = build_app(project, db, settings, ui=not args.no_ui, token=token)
     except ImportError as e:
         print(
             f"msdf up에는 server 묶음이 필요합니다 ({e.name or e}). "
@@ -85,8 +98,14 @@ def cmd_up(args: argparse.Namespace) -> int:
 
         if not (dist_dir() / "index.html").exists():
             print(f"UI 빌드 없음 ({dist_dir()}): /ui에서 빌드 방법을 안내합니다.")
+    if token:
+        print("토큰 사용: 서비스는 MSDF_TOKEN, 웹 UI는 처음 열 때 같은 값을 입력합니다.")
     if args.host not in ("127.0.0.1", "localhost", "::1"):
-        print("주의: 엔진 API에는 인증이 없습니다. 믿을 수 있는 네트워크에서만 여세요.")
+        if not token:
+            print(
+                "주의: 토큰 없이 외부에 열었습니다. 누구나 API를 부를 수 있습니다. "
+                "--token(또는 MSDF_TOKEN)을 쓰세요."
+            )
     else:
         print(
             "이 주소는 엔진이 도는 컴퓨터에서만 열립니다. "
@@ -111,6 +130,105 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_init(args: argparse.Namespace) -> int:
+    from ms_dataflow.scaffold import init
+
+    target = Path(args.dir)
+    try:
+        written = init(target)
+    except FileExistsError as e:
+        print(f"이미 있는 파일이 있어 아무것도 만들지 않았습니다: {e}", file=sys.stderr)
+        return 1
+    for p in written:
+        print(f"  만듦  {p}")
+    where = "" if args.dir == "." else f"cd {args.dir}\n  "
+    print(
+        "\n다음 순서로 실행해 보세요 (터미널 네 개):\n"
+        f"  {where}msdf up\n  python source.py\n  python transform.py\n  python app.py"
+    )
+    return 0
+
+
+# --- 떠 있는 엔진에 묻기 -------------------------------------------------------
+def _engine(args: argparse.Namespace) -> tuple[str, str | None]:
+    url = (args.engine or os.environ.get("MSDF_SCHEDULER") or "http://127.0.0.1:8787").rstrip("/")
+    return url, args.token or os.environ.get("MSDF_TOKEN") or None
+
+
+def _call(args: argparse.Namespace, method: str, path: str) -> Any:
+    url, token = _engine(args)
+    req = urllib.request.Request(url + path, method=method)
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read() or b"null")
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            raise SystemExit(
+                "엔진이 토큰을 요구합니다. --token 또는 MSDF_TOKEN을 주세요."
+            ) from None
+        if e.code == 404:
+            raise SystemExit(f"없습니다: {path}") from None
+        raise SystemExit(f"엔진 오류 {e.code}: {e.read().decode(errors='replace')}") from None
+    except (urllib.error.URLError, OSError) as e:
+        raise SystemExit(f"엔진({url})에 연결하지 못했습니다: {e}. msdf up이 떠 있나요?") from None
+
+
+def _ago(t: float | None) -> str:
+    if not t:
+        return "-"
+    s = max(0.0, time.time() - t)
+    for unit, size in (("일", 86400), ("시간", 3600), ("분", 60)):
+        if s >= size:
+            return f"{int(s // size)}{unit} 전"
+    return f"{int(s)}초 전"
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    o = _call(args, "GET", "/api/overview")
+    t = o.get("totals", {})
+    print(f"엔진: {_engine(args)[0]}")
+    print(
+        f"최근 1시간 run {t.get('runs', 0)}개: 완료 {t.get('runs_done', 0)}, "
+        f"실패 {t.get('runs_failed', 0)}, 진행 중 {t.get('runs_running', 0)}"
+    )
+    print("서비스:")
+    for svc in o.get("services", []):
+        inst = svc.get("instances", [])
+        busy = sum(1 for i in inst if i.get("busy"))
+        state = f"인스턴스 {len(inst)}개 (실행 중 {busy})" if inst else "연결 안 됨"
+        print(f"  {svc['name']:<20} {state}")
+    return 0
+
+
+def cmd_runs(args: argparse.Namespace) -> int:
+    q = f"/api/runs?limit={args.limit}" + (f"&status={args.status}" if args.status else "")
+    runs = _call(args, "GET", q)
+    if not runs:
+        print("실행 기록이 없습니다.")
+        return 0
+    print(f"{'run':<18}{'order':<20}{'요청':<14}{'상태':<11}시작")
+    for r in runs:
+        print(
+            f"{r['run_id']:<18}{r['order_name']:<20}{r['requester']:<14}"
+            f"{r['status']:<11}{_ago(r.get('created_at'))}"
+        )
+        if r.get("error") and r["status"] != "done":
+            print(f"{'':<18}└ {str(r['error']).splitlines()[-1][:100]}")
+    return 0
+
+
+def cmd_cancel(args: argparse.Namespace) -> int:
+    out = _call(args, "POST", f"/api/runs/{args.run_id}/cancel")
+    if out.get("ok"):
+        kept = f", 다른 요청과 공유해 계속 도는 단계 {out['kept']}개" if out.get("kept") else ""
+        print(f"취소했습니다: 단계 {out['cancelled']}개 중지{kept}")
+        return 0
+    print(f"취소할 수 없습니다: 이미 {out.get('status')} 상태입니다.", file=sys.stderr)
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="msdf", description="MSDF — Micro Service Data Flow")
     parser.add_argument("--version", action="version", version=f"msdf {__version__}")
@@ -129,6 +247,11 @@ def main(argv: list[str] | None = None) -> int:
             help="DAG가 참조하는 서비스가 이 프로젝트에 없어도 허용한다 (다른 저장소의 서비스). "
             "그 서비스는 등록할 때 검사한다",
         )
+        p.add_argument(
+            "--no-cache",
+            action="store_true",
+            help="코드 분석 캐시(<config>/.msdf/scan.cache)를 쓰지 않는다",
+        )
 
     up = sub.add_parser("up", help="엔진을 띄운다")
     common(up)
@@ -144,11 +267,41 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="빌드한 웹 UI 폴더 (기본: 패키지 안 ms_dataflow/ui/dist, 환경 변수 MSDF_UI_DIST)",
     )
+    up.add_argument(
+        "--token",
+        default=None,
+        help="서비스와 웹 UI가 보내야 하는 비밀 값 (기본: 환경 변수 MSDF_TOKEN). 외부에 열 때 쓴다",
+    )
     up.set_defaults(func=cmd_up)
 
     check = sub.add_parser("check", help="설정과 코드를 검증만 한다")
     common(check)
     check.set_defaults(func=cmd_check)
+
+    init = sub.add_parser("init", help="새 프로젝트 뼈대를 만든다")
+    init.add_argument("dir", nargs="?", default=".", help="만들 폴더 (기본: .)")
+    init.set_defaults(func=cmd_init)
+
+    def remote(p: argparse.ArgumentParser) -> None:
+        p.add_argument(
+            "--engine", default=None, help="엔진 주소 (기본: MSDF_SCHEDULER 또는 127.0.0.1:8787)"
+        )
+        p.add_argument("--token", default=None, help="엔진 토큰 (기본: MSDF_TOKEN)")
+
+    status = sub.add_parser("status", help="떠 있는 엔진과 서비스 상태를 본다")
+    remote(status)
+    status.set_defaults(func=cmd_status)
+
+    runs = sub.add_parser("runs", help="최근 실행(run) 목록")
+    remote(runs)
+    runs.add_argument("--limit", type=int, default=20)
+    runs.add_argument("--status", choices=["running", "done", "failed", "cancelled"])
+    runs.set_defaults(func=cmd_runs)
+
+    cancel = sub.add_parser("cancel", help="진행 중인 run을 취소한다")
+    remote(cancel)
+    cancel.add_argument("run_id")
+    cancel.set_defaults(func=cmd_cancel)
 
     args = parser.parse_args(argv)
     code: int = args.func(args)

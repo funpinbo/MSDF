@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 
 from ms_dataflow.execute.runner import run_task
 from ms_dataflow.models import StepResult, StepTask
@@ -27,7 +27,9 @@ class Worker:
         registry: Registry,
         report: Callable[[StepResult], None],
         instance_id: Callable[[], str],
+        token: str | None = None,
     ) -> None:
+        self.token = token
         self.registry = registry
         self.report = report
         self.instance_id = instance_id
@@ -78,8 +80,15 @@ class Worker:
         log.error("결과를 보고하지 못했습니다: %s:%s", task.run_id, task.step_no)
 
     def app(self) -> FastAPI:
-        app = FastAPI(title="MSDF worker")
         worker = self
+
+        def authorized(request: Request) -> None:
+            from ms_dataflow.execute.scheduler import token_ok
+
+            if worker.token and not token_ok(request, worker.token):
+                raise HTTPException(401, "엔진 토큰이 맞지 않습니다")
+
+        app = FastAPI(title="MSDF worker", dependencies=[Depends(authorized)])
 
         @app.post("/run", status_code=202)
         def run(task: StepTask) -> dict[str, bool]:

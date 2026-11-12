@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
+import pickle
+import sys
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ms_dataflow.errors import DeclarationError, LoadError, raise_collected
 from ms_dataflow.models import ActionSpec, ServiceSpec
-from ms_dataflow.registry.scan import FileFacts, ImportRef, scan_source
+from ms_dataflow.registry.scan import FileFacts, ImportRef, TopDef, scan_source
 
 _SKIP_DIRS = {
     "__pycache__",
@@ -81,15 +84,147 @@ def _module_candidates(root: Path, file: Path, ref: ImportRef) -> list[Path]:
     return cands
 
 
+def _module_file(root: Path, file: Path, ref: ImportRef, known: set[Path]) -> Path | None:
+    """import가 가리키는 모듈 파일 (프로젝트 안에 있을 때만)."""
+    parts = ref.module.split(".") if ref.module else []
+    if ref.level:
+        base = file.parent
+        for _ in range(ref.level - 1):
+            base = base.parent
+        bases = [base.joinpath(*parts)]
+    else:
+        bases = [root.joinpath(*parts), file.parent.joinpath(*parts)]
+    for b in bases:
+        for c in (b.with_suffix(".py"), b / "__init__.py"):
+            c = c.resolve()
+            if c in known:
+                return c
+    return None
+
+
+def helper_version(
+    root: Path, facts: dict[Path, FileFacts], file: Path, action: str, body_version: str
+) -> str:
+    """Action 본문에 더해, 본문이 부르는 프로젝트 안 함수·클래스·상수까지 반영한 버전.
+
+    도우미 코드가 없으면 본문 버전을 그대로 쓴다 (0.1과 같은 값).
+    """
+    known = set(facts)
+    start = facts[file].action_refs.get(action)
+    if start is None:
+        return body_version
+
+    def lookup(f: Path, name: str) -> tuple[Path, str] | None:
+        ff = facts[f]
+        if name in ff.defs:
+            return f, name
+        imp = ff.import_names.get(name)
+        if imp is None or imp[1] is None:
+            return None
+        ref, orig = imp
+        mod = _module_file(root, f, ref, known)
+        if mod is not None and orig in facts[mod].defs:
+            return mod, orig
+        return None
+
+    def module_alias(f: Path, name: str) -> Path | None:
+        imp = facts[f].import_names.get(name)
+        if imp is None:
+            return None
+        ref, orig = imp
+        if orig is None:
+            return _module_file(root, f, ref, known)
+        sub = ImportRef(f"{ref.module}.{orig}" if ref.module else orig, ref.level, (), ref.lineno)
+        return _module_file(root, f, sub, known)
+
+    seen: set[tuple[Path, str]] = {(file, action)}
+    found: list[str] = []
+    stack: list[tuple[Path, TopDef]] = [(file, start)]
+    while stack:
+        f, top = stack.pop()
+        targets = [lookup(f, n) for n in sorted(top.names)]
+        for mod_name, attr in sorted(top.attrs):
+            mod = module_alias(f, mod_name)
+            if mod is not None and attr in facts[mod].defs:
+                targets.append((mod, attr))
+        for t in targets:
+            if t is None or t in seen:
+                continue
+            seen.add(t)
+            d = facts[t[0]].defs[t[1]]
+            found.append(f"{t[1]}:{d.digest}")
+            stack.append((t[0], d))
+    if not found:
+        return body_version
+    h = hashlib.sha256(body_version.encode())
+    for item in sorted(found):
+        h.update(b"\x1f" + item.encode())
+    return h.hexdigest()[:12]
+
+
+class ScanCache:
+    """파일별 분석 결과 캐시.
+
+    (경로, 수정 시각, 크기, MSDF·파이썬 버전)이 같으면 다시 분석하지 않는다.
+
+    오류가 있는 파일은 캐시하지 않는다(다음에 다시 분석해 같은 오류를 보여 준다).
+    """
+
+    def __init__(self, path: Path | None) -> None:
+        self.path = path
+        self.items: dict[str, tuple[tuple[int, int], FileFacts]] = {}
+        self.dirty = False
+        if path is not None and path.exists():
+            try:
+                with path.open("rb") as f:
+                    data = pickle.load(f)
+                if data.get("key") == self._key():
+                    self.items = data["items"]
+            except Exception:  # noqa: BLE001 - 깨진 캐시는 버린다
+                self.items = {}
+
+    @staticmethod
+    def _key() -> str:
+        from ms_dataflow import __version__
+
+        return f"{__version__}|{sys.version_info[:2]}"
+
+    def get(self, p: Path) -> FileFacts:
+        st = p.stat()
+        stamp = (st.st_mtime_ns, st.st_size)
+        hit = self.items.get(str(p))
+        if hit is not None and hit[0] == stamp:
+            return hit[1]
+        facts = scan_source(str(p), p.read_text("utf-8"))
+        if not facts.errors:
+            self.items[str(p)] = (stamp, facts)
+            self.dirty = True
+        return facts
+
+    def save(self) -> None:
+        if self.path is None or not self.dirty:
+            return
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_name(self.path.name + ".tmp")
+            with tmp.open("wb") as f:
+                pickle.dump({"key": self._key(), "items": self.items}, f)
+            os.replace(tmp, self.path)
+        except OSError:
+            pass
+
+
 def collect(
     root: str | Path,
     *,
     entry: str | Path | None = None,
     files: list[Path] | None = None,
+    cache: Path | None = None,
 ) -> Registry:
     """프로젝트를 분석한다.
 
     ``entry``를 주면 그 파일에서 import로 닿는 곳에 있는 서비스만 모은다(start()가 쓴다).
+    ``cache``를 주면 그 파일에 분석 결과를 저장해 두고, 바뀌지 않은 파일은 다시 분석하지 않는다.
     오류가 있으면 모아서 LoadError(또는 LoadErrors)로 던진다.
     """
     rootp = Path(root).resolve()
@@ -99,12 +234,13 @@ def collect(
         if e not in all_files:
             all_files.append(e)
     facts: dict[Path, FileFacts] = {}
+    sc = ScanCache(cache)
     for p in all_files:
         try:
-            text = p.read_text("utf-8")
+            facts[p] = sc.get(p)
         except (OSError, UnicodeDecodeError):
             continue
-        facts[p] = scan_source(str(p), text)
+    sc.save()
 
     reg = Registry(root=str(rootp))
     errors: list[LoadError] = []
@@ -210,7 +346,9 @@ def collect(
                         inputs=o["inputs"],
                         outputs=o["outputs"],
                         params=o["params"],
-                        version=ad.version,
+                        version=ad.version
+                        if ad.explicit_version
+                        else helper_version(rootp, facts, fp, ad.name, ad.version),
                         retries=int(o.get("retries", 0)),
                         retry_delay=float(o.get("retry_delay", 0.0)),
                         fresh_for=o.get("fresh_for"),

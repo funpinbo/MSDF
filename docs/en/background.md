@@ -68,11 +68,11 @@ def answer(question):
 
 ```python
 # translate.py — a new service; it declares only its own work
-@service("translate")
-def translate(): ...
+service("translate")
 
 @action(inputs=["docs"], outputs=["out"])
-def to_korean(docs): ...
+def to_korean(docs):
+    return [translate_text(d, target="ko") for d in docs]   # call whatever translation library you use
 ```
 
 ```yaml

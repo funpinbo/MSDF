@@ -166,3 +166,141 @@ def test_duplicate_service_name(tmp_path):
     write(tmp_path, "b.py", "from ms_dataflow import service\n@service('x')\ndef b(): ...\n")
     with pytest.raises(DeclarationError, match="두 번 선언"):
         collect(tmp_path)
+
+
+# --- 0.2: 함수 없는 서비스 선언 ------------------------------------------------
+def test_service_statement_form(tmp_path):
+    write(
+        tmp_path,
+        "s.py",
+        "from ms_dataflow import service, action\nservice('search')\n"
+        "@action(outputs=['docs'])\ndef fetch() -> list:\n    return []\n",
+    )
+    reg = collect(tmp_path)
+    assert reg.services["search"].actions == ("fetch",)
+
+
+def test_service_statement_needs_literal_name(tmp_path):
+    write(tmp_path, "s.py", "from ms_dataflow import service\nNAME='x'\nservice(NAME)\n")
+    with pytest.raises(LoadError) as e:
+        collect(tmp_path)
+    assert "서비스 이름 문자열" in str(e.value.render())
+
+
+def test_service_statement_runs(tmp_path):
+    from ms_dataflow import service
+
+    assert callable(service("ok"))  # 문장으로 불러도 아무 일도 없다
+
+
+def test_action_in_class_is_error(tmp_path):
+    write(
+        tmp_path,
+        "s.py",
+        "from ms_dataflow import service, action\nservice('s')\n"
+        "class K:\n    @action\n    def m(self): ...\n",
+    )
+    with pytest.raises(LoadError):
+        collect(tmp_path)
+
+
+# --- 0.2: 버전이 도우미 코드를 따라간다 ------------------------------------------
+def _ver(tmp_path, files):
+    for name, text in files.items():
+        write(tmp_path, name, text)
+    return collect(tmp_path).actions[("s", "a")].version
+
+
+HEAD = "from ms_dataflow import service, action\nservice('s')\n"
+
+
+def test_version_unchanged_without_helpers(tmp_path):
+    from ms_dataflow.ids import version_of_source
+
+    body = "@action\ndef a():\n    return len([1])\n"
+    assert _ver(tmp_path, {"s.py": HEAD + body}) == version_of_source(body)
+
+
+def test_version_follows_same_file_helper(tmp_path):
+    v1 = _ver(
+        tmp_path,
+        {"s.py": HEAD + "def h(x):\n    return x + 1\n@action\ndef a():\n    return h(1)\n"},
+    )
+    v2 = _ver(
+        tmp_path,
+        {"s.py": HEAD + "def h(x):\n    return x + 2\n@action\ndef a():\n    return h(1)\n"},
+    )
+    v3 = _ver(
+        tmp_path,
+        {
+            "s.py": HEAD
+            + "def h(x):\n    '''doc'''\n    return x + 2  # c\n@action\ndef a():\n    return h(1)\n"
+        },
+    )
+    assert v1 != v2
+    assert v2 == v3  # 주석과 docstring은 영향 없음
+
+
+def test_version_follows_constant_and_transitive(tmp_path):
+    base = "def g():\n    return K\ndef h():\n    return g()\n@action\ndef a():\n    return h()\n"
+    v1 = _ver(tmp_path, {"s.py": HEAD + "K = 1\n" + base})
+    v2 = _ver(tmp_path, {"s.py": HEAD + "K = 2\n" + base})
+    assert v1 != v2
+
+
+def test_version_follows_imported_helper(tmp_path):
+    files = {
+        "s.py": HEAD + "from util import norm\nimport util as u\n"
+        "@action\ndef a():\n    return norm(1) + u.scale(2)\n",
+    }
+    v1 = _ver(
+        tmp_path, {**files, "util.py": "def norm(x):\n    return x\ndef scale(x):\n    return x\n"}
+    )
+    v2 = _ver(
+        tmp_path, {**files, "util.py": "def norm(x):\n    return -x\ndef scale(x):\n    return x\n"}
+    )
+    v3 = _ver(
+        tmp_path,
+        {**files, "util.py": "def norm(x):\n    return -x\ndef scale(x):\n    return 2 * x\n"},
+    )
+    v4 = _ver(
+        tmp_path,
+        {
+            **files,
+            "util.py": "def norm(x):\n    return -x\ndef scale(x):\n    return 2 * x\ndef other():\n    return 0\n",
+        },
+    )
+    assert len({v1, v2, v3}) == 3
+    assert v3 == v4  # 쓰지 않는 함수는 영향 없음
+
+
+def test_explicit_version_wins(tmp_path):
+    v = _ver(
+        tmp_path,
+        {"s.py": HEAD + "def h():\n    return 1\n@action(version='7')\ndef a():\n    return h()\n"},
+    )
+    assert v == "7"
+
+
+def test_scan_cache_reuses_and_invalidates(tmp_path, monkeypatch):
+    import os
+
+    import ms_dataflow.registry as registry
+
+    write(tmp_path, "s.py", HEAD + "@action\ndef a():\n    return 1\n")
+    cache = tmp_path / ".msdf" / "scan.cache"
+    first = collect(tmp_path, cache=cache)
+    assert cache.exists()
+    calls = []
+    real = registry.scan_source
+    monkeypatch.setattr(registry, "scan_source", lambda *a: calls.append(a) or real(*a))
+    assert collect(tmp_path, cache=cache).actions == first.actions
+    assert calls == []  # 바뀐 파일이 없으면 분석하지 않는다
+    p = tmp_path / "s.py"
+    p.write_text(HEAD + "@action\ndef a():\n    return 2\n")
+    os.utime(p, ns=(p.stat().st_mtime_ns + 10**9, p.stat().st_mtime_ns + 10**9))
+    third = collect(tmp_path, cache=cache)
+    assert len(calls) == 1
+    assert third.actions[("s", "a")].version != first.actions[("s", "a")].version
+    cache.write_bytes(b"broken")
+    assert collect(tmp_path, cache=cache).actions == third.actions  # 깨진 캐시는 버린다

@@ -81,23 +81,23 @@ pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git"
 특정 버전에 고정하려면 태그나 커밋을 붙입니다.
 
 ```bash
-pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.1.0"
+pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.2.0"
 ```
 
 의존성 파일에 적을 때:
 
 ```text
 # requirements.txt
-msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.1.0
+msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.2.0
 ```
 
 ```toml
 # pyproject.toml
 [project]
-dependencies = ["msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.1.0"]
+dependencies = ["msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.2.0"]
 ```
 
-uv라면 `uv add "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git" --tag v0.1.0`.
+uv라면 `uv add "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git" --tag v0.2.0`.
 
 **git 주소로 설치하면 웹 UI 빌드 결과는 들어 있지 않습니다**(저장소에 빌드 결과를 넣지 않기 때문입니다). 이렇게 설치한 곳에서 엔진을 띄우고 UI도 쓰려면,
 저장소를 받아 UI를 한 번 빌드한 뒤 그 폴더를 알려 줍니다.
@@ -117,13 +117,13 @@ UI 없이 엔진만 띄워도 실행에는 문제가 없습니다. `/ui`에 빌�
 cd MSDF
 (cd frontend && npm install && npm run build)
 uv build --wheel                   # 또는: pip install build && python -m build --wheel
-ls dist/                           # msdf-0.1.0-py3-none-any.whl
+ls dist/                           # msdf-0.2.0-py3-none-any.whl
 ```
 
 옮긴 곳에서:
 
 ```bash
-pip install "msdf-0.1.0-py3-none-any.whl[server]"
+pip install "msdf-0.2.0-py3-none-any.whl[server]"
 ```
 
 > 휠에는 UI가 쓰는 라이브러리의 빌드된 코드가 들어갑니다: Vue, vue-router, Vue Flow(안에 VueUse 포함), dagre는 MIT,
@@ -152,4 +152,5 @@ pip install "msdf-0.1.0-py3-none-any.whl[server]"
 | `npm run build`가 Node 버전 오류를 낸다 | Node.js 20.19 이상 또는 22.12 이상 |
 | 브라우저에서 `http://127.0.0.1:8787/ui`가 열리지 않는다 | ① `msdf up`이 떠 있는지(`run_local.py`에는 웹 UI가 없습니다), ② 엔진이 원격 서버·VM에서 돈다면 `127.0.0.1`은 그 컴퓨터 자신만 가리킵니다. 내 컴퓨터에서 `ssh -L 8787:127.0.0.1:8787 사용자@서버`로 터널을 연 뒤 `http://127.0.0.1:8787/ui`를 엽니다. 믿을 수 있는 네트워크라면 `msdf up --host 0.0.0.0`으로 열고 `http://서버주소:8787/ui`로 접속해도 됩니다(방화벽에서 8787 허용). ③ 화면이 비어 있으면 `frontend`에서 `npm run build`를 했는지 확인하세요 |
 | `start()`가 "엔진을 기다리는 중"에서 멈춘다 | `msdf up`이 떠 있는지, 주소가 맞는지(`MSDF_SCHEDULER`) |
-| 엔진이 "스키마 v1로 만들어졌고" 오류를 낸다 | 0.x 동안은 DB를 자동 변환하지 않습니다. `.msdf/msdf.db`를 지우고 다시 시작 (캐시와 실행 기록만 사라짐) |
+| 엔진이 "더 새 버전의 MSDF가 만든 DB"라며 시작하지 않는다 | 더 새 MSDF로 만든 `.msdf/msdf.db`를 옛 버전으로 열었습니다. 버전을 맞추거나, DB를 지우고 다시 시작 (캐시와 실행 기록만 사라짐). 옛 DB는 시작할 때 자동으로 변환되고 `msdf.db.v<번호>.bak` 백업이 남습니다 |
+| 서비스가 "엔진이 토큰을 요구합니다"라며 멈춘다, 웹 UI가 토큰을 묻는다 | 엔진을 `--token`이나 `MSDF_TOKEN`으로 띄웠습니다. 서비스에 같은 `MSDF_TOKEN`을 주고, UI에는 같은 값을 입력하세요 |

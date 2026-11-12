@@ -38,13 +38,14 @@ npm run dev          # terminal 2 — http://localhost:5173/ui/ (/api is proxied
 | `#/logs/services` | Services | Instances, heartbeats, per-Action statistics |
 | `#/logs/dags` | DAGs | Per-DAG statistics and YAML |
 | `#/logs/engine` | Engine log | The engine process's log, live |
-| `#/runs/:id` | Run detail | One run's graph, step timeline, failure location, result lineage |
+| `#/runs/:id` | Run detail | One run's graph, step timeline, failure location, result lineage, cancel |
+| `#/iam` | Permissions | Edit, validate and save IAM layers and rules; try a permission |
 
 ## Files
 
 | File | Contents |
 | --- | --- |
-| `src/api.js` | API calls and periodic refresh (`usePoll`) |
+| `src/api.js` | API calls, engine token, re-reading on live signals (SSE) (`usePoll`, falls back to polling) |
 | `src/layout.js` | automatic layout with dagre (grouped by service) |
 | `src/pages/` | pages |
 | `src/components/` | parts such as nodes, tables and charts |

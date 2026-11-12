@@ -55,6 +55,10 @@ DAG 파일은 손으로 써도 되고, 웹 UI의 [DAG 편집기](how-it-works.md
 
 ## IAM 파일
 
+웹 UI의 **권한** 화면에서도 계층과 규칙을 표로 고칠 수 있습니다. 바꿀 때마다 검증하고, 저장하면 같은 형식의 `iam.yaml`을 쓰고
+엔진에 바로 반영합니다(이미 접수된 run에는 영향 없음). 같은 화면의 **권한 시험**으로 "이 서비스가 이 order를 내면 통과하는가"를
+실행하지 않고 확인할 수 있습니다.
+
 누가 어떤 요청을 할 수 있고, 데이터가 어디서 어디로 흐를 수 있는지 정합니다. 프로젝트에 하나만 둡니다.
 **파일이 없으면 권한 검사를 하지 않습니다**(모든 요청 허용, `msdf up`이 경고). 파일이 있으면 기본이 거부입니다.
 
@@ -155,10 +159,16 @@ ID는 `ms_dataflow.ids.artifact_id`로 만들어야 엔진이 미리 계산한 I
 ## `msdf` 명령
 
 ```bash
-msdf check [--root .] [--config DIR] [--allow-external]
-msdf up    [--root .] [--config DIR] [--allow-external]
-           [--host 127.0.0.1] [--port 8787] [--db PATH]
+msdf init  [DIR]                                   # 새 프로젝트 뼈대 (서비스 셋, DAG, iam.yaml)
+msdf check [--root .] [--config DIR] [--allow-external] [--no-cache]
+msdf up    [--root .] [--config DIR] [--allow-external] [--no-cache]
+           [--host 127.0.0.1] [--port 8787] [--db PATH] [--token SECRET]
            [--lease-ttl 60] [--keep-generations 3] [--keep-versions 3] [--no-ui] [--ui-dist DIR]
+
+# 떠 있는 엔진에 묻는다 (--engine 기본: MSDF_SCHEDULER 또는 http://127.0.0.1:8787, --token 기본: MSDF_TOKEN)
+msdf status [--engine URL] [--token SECRET]        # 서비스 연결 상태와 최근 1시간 요약
+msdf runs   [--engine URL] [--token SECRET] [--limit 20] [--status running|done|failed|cancelled]
+msdf cancel RUN_ID [--engine URL] [--token SECRET] # 진행 중인 run 취소
 ```
 
 | 옵션 | 기본 | 뜻 |
@@ -172,7 +182,22 @@ msdf up    [--root .] [--config DIR] [--allow-external]
 | `--keep-versions` | 3 | 같은 자리에서 버전만 다른 결과를 몇 개 hot에 둘지 |
 | `--no-ui` | 꺼짐 | 웹 UI를 띄우지 않음 |
 | `--ui-dist` | 패키지 안 `ui/dist` | 빌드한 웹 UI 폴더. 환경 변수 `MSDF_UI_DIST`로도 지정 |
+| `--token` | `MSDF_TOKEN` | 엔진 토큰. 주면 서비스, 웹 UI, `msdf status` 등이 모두 같은 값을 보내야 한다 |
+| `--no-cache` | 꺼짐 | 코드 분석 캐시(`<config>/.msdf/scan.cache`)를 쓰지 않는다. 바뀌지 않은 파일은 다시 분석하지 않는 캐시다 |
 
-서비스 쪽 환경 변수: `MSDF_SCHEDULER`(엔진 주소, 기본 `http://127.0.0.1:8787`).
+서비스 쪽 환경 변수: `MSDF_SCHEDULER`(엔진 주소, 기본 `http://127.0.0.1:8787`), `MSDF_TOKEN`(엔진 토큰).
 
-> 엔진 API와 웹 UI에는 인증이 없습니다. `--host`를 `127.0.0.1`이 아닌 곳으로 열면 경고를 냅니다. 믿을 수 있는 네트워크에서만 여세요.
+### 엔진 토큰
+
+기본은 인증 없이 `127.0.0.1`에서만 열립니다. 다른 컴퓨터에서 접근하게 열 때는 토큰을 쓰세요.
+
+```bash
+export MSDF_TOKEN=$(python -c "import secrets; print(secrets.token_urlsafe(24))")
+msdf up --host 0.0.0.0          # MSDF_TOKEN을 읽는다 (또는 --token 값)
+MSDF_TOKEN=... python source.py # 서비스도 같은 값
+```
+
+- 서비스 → 엔진, 엔진 → 서비스(단계 전달) 요청 모두 `Authorization: Bearer <토큰>`을 확인합니다.
+- 웹 UI는 처음 열 때 토큰을 묻고, 그 브라우저에만 저장합니다. `/ui`의 정적 파일과 `/health`만 토큰 없이 열립니다.
+- 토큰은 통신을 암호화하지 않습니다. 믿을 수 없는 네트워크라면 HTTPS 프록시나 SSH 터널 뒤에 두세요.
+- 토큰 없이 `--host`를 `127.0.0.1`이 아닌 곳으로 열면 경고를 냅니다.

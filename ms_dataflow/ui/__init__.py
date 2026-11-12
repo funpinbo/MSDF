@@ -7,15 +7,17 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 
-from ms_dataflow import dag_store, metrics, ops
+from ms_dataflow import dag_store, iam_store, metrics, ops
 from ms_dataflow.config.dag import incoming
 from ms_dataflow.errors import ConfigError
 from ms_dataflow.models import split_ref
@@ -334,5 +336,110 @@ def install(sched: Scheduler) -> None:
         @app.get("/api/services")
         async def api_services() -> dict[str, Any]:
             return await sched.db(catalog, sched)
+
+        # --- 실시간 신호 (SSE) -------------------------------------------------
+        @app.get("/api/stream")
+        async def api_stream(request: Request, once: bool = False) -> StreamingResponse:
+            """상태가 바뀌면 신호를 보낸다. 화면은 신호를 받을 때만 다시 읽는다."""
+
+            async def gen() -> Any:
+                yield "retry: 3000\n\n"
+                last: tuple[int, int] | None = None
+                quiet = 0
+                while True:
+                    sig = (sched.version, sched.logs.seq)
+                    if sig != last:
+                        last = sig
+                        quiet = 0
+                        yield f"data: {json.dumps({'v': sig[0], 'log': sig[1]})}\n\n"
+                        if once:
+                            return
+                    else:
+                        quiet += 1
+                        if quiet >= 50:  # 15초마다 연결 유지용 주석
+                            quiet = 0
+                            yield ": ping\n\n"
+                    if await request.is_disconnected():
+                        return
+                    await asyncio.sleep(0.3)
+
+            return StreamingResponse(
+                gen(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
+
+        # --- 실행 취소 ---------------------------------------------------------
+        @app.post("/api/runs/{run_id}/cancel")
+        async def api_cancel(run_id: str) -> dict[str, Any]:
+            try:
+                out: dict[str, Any] = await sched.db(sched.engine.cancel, run_id)
+            except KeyError:
+                raise HTTPException(404, "run이 없습니다") from None
+            if out["ok"]:
+                sched.logs.emit_message(f"실행 취소: {run_id} (단계 {out['cancelled']}개 중지)")
+            sched.kick()
+            return out
+
+        # --- IAM -------------------------------------------------------------
+        @app.get("/api/iam")
+        async def api_iam() -> dict[str, Any]:
+            def q() -> dict[str, Any]:
+                iam = sched.project.iam
+                spec = iam.spec if iam else None
+                data = iam_store.to_json(spec)
+                path = iam_store.iam_path(sched.project)
+                return {
+                    **data,
+                    "exists": iam is not None,
+                    "path": str(path),
+                    "yaml": path.read_text("utf-8") if path.exists() else "",
+                    "required_context": iam.required_context() if iam else [],
+                    "services": sorted(sched.project.registry.services),
+                    "actions": sorted(f"{s}.{a}" for s, a in sched.project.registry.actions),
+                    "orders": sorted(sched.project.dags),
+                }
+
+            return await sched.db(q)
+
+        @app.post("/api/iam/validate")
+        async def api_iam_validate(body: dict[str, Any]) -> dict[str, Any]:
+            def q() -> dict[str, Any]:
+                spec, raw, errors = iam_store.check(sched.project, body)
+                return {
+                    "ok": spec is not None and not errors,
+                    "errors": errors,
+                    "yaml": iam_store.to_yaml(raw),
+                }
+
+            return await sched.db(q)
+
+        @app.put("/api/iam")
+        async def api_iam_save(body: dict[str, Any]) -> dict[str, Any]:
+            def q() -> dict[str, Any]:
+                spec, raw, errors = iam_store.check(sched.project, body)
+                if spec is None or errors:
+                    return {"ok": False, "errors": errors}
+                path = iam_store.save(sched.project, spec, raw, sched.engine)
+                return {"ok": True, "path": path, "yaml": iam_store.to_yaml(raw)}
+
+            out = await sched.db(q)
+            if out["ok"]:
+                sched.logs.emit_message(f"IAM 저장: {out['path']}")
+                sched.kick()
+            return out
+
+        @app.post("/api/iam/try")
+        async def api_iam_try(body: dict[str, Any]) -> dict[str, Any]:
+            def q() -> dict[str, Any]:
+                ctx = {str(k): str(v) for k, v in (body.get("context") or {}).items() if v}
+                return iam_store.try_order(
+                    sched.project, str(body.get("order", "")), str(body.get("requester", "")), ctx
+                )
+
+            try:
+                return await sched.db(q)
+            except ConfigError as e:
+                raise HTTPException(404, e.reason) from None
 
     sched.extensions.setdefault("routes", []).append(routes)

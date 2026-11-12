@@ -30,13 +30,14 @@ def load_project(
     *,
     config_dir: str | Path | None = None,
     strict_services: bool = True,
+    cache: bool = False,
 ) -> Project:
-    """오류는 모아서 한 번에 던진다."""
+    """오류는 모아서 한 번에 던진다. cache=True면 <config>/.msdf/scan.cache에 분석 결과를 둔다."""
     rootp = Path(root).resolve()
     cfg = Path(config_dir).resolve() if config_dir else rootp
     errors: list[LoadError] = []
     try:
-        registry = collect(rootp)
+        registry = collect(rootp, cache=cfg / ".msdf" / "scan.cache" if cache else None)
     except LoadError as e:
         errors += getattr(e, "errors", [e])
         registry = Registry(root=str(rootp))

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -43,6 +44,7 @@ class ActionDecl:
     args: tuple[str, ...]
     is_async: bool
     version: str
+    explicit_version: bool = False
 
 
 @dataclass
@@ -53,6 +55,15 @@ class ServiceDecl:
 
 
 @dataclass
+class TopDef:
+    """파일 최상위의 함수, 클래스, 상수 하나. Action 버전에 도우미 코드를 반영할 때 쓴다."""
+
+    digest: str
+    names: frozenset[str]  # 본문이 참조하는 이름
+    attrs: frozenset[tuple[str, str]]  # 본문이 참조하는 모듈.속성
+
+
+@dataclass
 class FileFacts:
     path: str
     services: list[ServiceDecl] = field(default_factory=list)
@@ -60,6 +71,9 @@ class FileFacts:
     orders: list[tuple[str, int]] = field(default_factory=list)
     imports: list[ImportRef] = field(default_factory=list)
     has_context: bool = False
+    defs: dict[str, TopDef] = field(default_factory=dict)
+    action_refs: dict[str, TopDef] = field(default_factory=dict)
+    import_names: dict[str, tuple[ImportRef, str | None]] = field(default_factory=dict)
     errors: list[DeclarationError] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -150,7 +164,46 @@ class _Scanner(ast.NodeVisitor):
             )
         self.generic_visit(node)
 
+    # --- 함수 없이 선언한 서비스: service("이름") -------------------------
+    def visit_Expr(self, node: ast.Expr) -> None:
+        call = node.value
+        if isinstance(call, ast.Call) and self._role(call) == "service":
+            line = self.lines[node.lineno - 1] if node.lineno <= len(self.lines) else ""
+            if (
+                len(call.args) != 1
+                or call.keywords
+                or not isinstance(call.args[0], ast.Constant)
+                or not isinstance(call.args[0].value, str)
+            ):
+                self.f.errors.append(
+                    DeclarationError(
+                        "service()에는 서비스 이름 문자열 하나를 줘야 합니다.",
+                        file=self.f.path,
+                        line=node.lineno,
+                        source=line,
+                        fix='service("이름")',
+                    )
+                )
+            elif self.depth:
+                self.f.errors.append(
+                    DeclarationError(
+                        "service()는 모듈 최상위에서만 부를 수 있습니다.",
+                        file=self.f.path,
+                        line=node.lineno,
+                        source=line,
+                        fix="함수나 클래스 밖, 파일 최상위로 옮기세요.",
+                    )
+                )
+            else:
+                self.f.services.append(ServiceDecl(call.args[0].value, "", node.lineno))
+        self.generic_visit(node)
+
     # --- 함수 정의 --------------------------------------------------------
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.depth += 1
+        self.generic_visit(node)
+        self.depth -= 1
+
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self._function(node)
 
@@ -262,8 +315,91 @@ class _Scanner(ast.NodeVisitor):
                 args=args,
                 is_async=isinstance(node, ast.AsyncFunctionDef),
                 version=str(version),
+                explicit_version=bool(opts.get("version")),
             )
         )
+
+
+def _refs(node: ast.AST) -> tuple[frozenset[str], frozenset[tuple[str, str]]]:
+    names: set[str] = set()
+    attrs: set[tuple[str, str]] = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
+            names.add(n.id)
+        elif isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name):
+            attrs.add((n.value.id, n.attr))
+    return frozenset(names), frozenset(attrs)
+
+
+def _digest(node: ast.AST) -> str:
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return version_of_node(node)
+    copy = ast.parse(ast.unparse(node)).body[0]
+    if isinstance(copy, ast.ClassDef):
+        copy.decorator_list = []
+        for item in copy.body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                _strip_doc(item)
+        _strip_doc(copy)
+    dumped = ast.dump(copy, annotate_fields=False, include_attributes=False)
+    return hashlib.sha256(dumped.encode()).hexdigest()[:12]
+
+
+def _strip_doc(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> None:
+    body = node.body
+    if (
+        body
+        and isinstance(body[0], ast.Expr)
+        and isinstance(body[0].value, ast.Constant)
+        and isinstance(body[0].value.value, str)
+    ):
+        node.body = body[1:] or [ast.Pass()]
+
+
+def _top_level(tree: ast.Module, facts: FileFacts) -> None:
+    """최상위 정의와 import 이름. Action 버전이 따라갈 도우미 코드를 찾는 재료."""
+    action_names = {a.name for a in facts.actions}
+    for stmt in tree.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            body = stmt.body if not isinstance(stmt, ast.ClassDef) else [stmt]
+            names: set[str] = set()
+            attrs: set[tuple[str, str]] = set()
+            for b in body:
+                n, a = _refs(b)
+                names |= n
+                attrs |= a
+            if not isinstance(stmt, ast.ClassDef):
+                for d in stmt.args.defaults + [x for x in stmt.args.kw_defaults if x]:
+                    n, a = _refs(d)
+                    names |= n
+                    attrs |= a
+            top = TopDef(_digest(stmt), frozenset(names), frozenset(attrs))
+            if stmt.name in action_names:
+                facts.action_refs[stmt.name] = top
+            facts.defs[stmt.name] = top
+        elif isinstance(stmt, (ast.Assign, ast.AnnAssign)):
+            targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
+            value = stmt.value
+            if value is None:
+                continue
+            n, a = _refs(value)
+            for t in targets:
+                if isinstance(t, ast.Name):
+                    facts.defs[t.id] = TopDef(_digest(stmt), n, a)
+        elif isinstance(stmt, ast.ImportFrom):
+            mod = stmt.module or ""
+            if mod.startswith("ms_dataflow") and stmt.level == 0:
+                continue
+            ref = ImportRef(mod, stmt.level, tuple(al.name for al in stmt.names), stmt.lineno)
+            for al in stmt.names:
+                facts.import_names[al.asname or al.name] = (ref, al.name)
+        elif isinstance(stmt, ast.Import):
+            for al in stmt.names:
+                if al.name.split(".")[0] == "ms_dataflow":
+                    continue
+                local = al.asname or al.name.split(".")[0]
+                target = al.name if al.asname else al.name.split(".")[0]
+                facts.import_names[local] = (ImportRef(target, 0, (), stmt.lineno), None)
 
 
 def scan_source(path: str, text: str) -> FileFacts:
@@ -278,4 +414,5 @@ def scan_source(path: str, text: str) -> FileFacts:
         )
         return facts
     _Scanner(facts, text.splitlines()).visit(tree)
+    _top_level(tree, facts)
     return facts

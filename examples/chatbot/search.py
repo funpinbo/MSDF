@@ -13,8 +13,7 @@ def words(text: str) -> set[str]:
     return set(re.findall(r"[0-9A-Za-z가-힣]+", text.lower()))
 
 
-@service("search")
-def search(): ...
+service("search")
 
 
 @action(params=["q"], outputs=["out"], fresh_for="1d", retries=3)

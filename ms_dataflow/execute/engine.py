@@ -405,8 +405,11 @@ class Engine:
                     (now, row["run_id"], row["step_no"]),
                 )
                 status = "done" if row["kind"] == "deliver" else "failed"
+                # 취소한 run은 실패 배달이 끝나도 'cancelled'로 남는다
                 db.execute(
-                    "UPDATE run SET status = ?, finished_at = ? WHERE run_id = ?",
+                    """UPDATE run
+                       SET status = CASE WHEN status = 'cancelled' THEN status ELSE ? END,
+                       finished_at = ? WHERE run_id = ?""",
                     (status, now, row["run_id"]),
                 )
             return
@@ -606,6 +609,47 @@ class Engine:
                 ).fetchone()
                 db.execute("UPDATE run SET replans = replans + 1 WHERE run_id = ?", (run_id,))
                 self._enqueue(run_id, dag, delivery, order, self.now(), first_no=next_no)
+
+    # --- 취소 --------------------------------------------------------------
+    def cancel(
+        self, run_id: str, reason: str = "사용자가 취소", now: float | None = None
+    ) -> dict[str, Any]:
+        """진행 중인 run을 멈춘다. 요청 서비스에는 on_fail로 status="cancelled"가 배달된다.
+
+        다른 run이 함께 기다리는(합류한) 단계는 멈추지 않는다. 이미 서비스에서 실행 중인 단계는
+        끝까지 돌지만 결과는 버린다.
+        """
+        now = self.clock() if now is None else now
+        rows = self.store.query("SELECT * FROM run WHERE run_id = ?", (run_id,))
+        if not rows:
+            raise KeyError(run_id)
+        if rows[0]["status"] != "running":
+            return {"ok": False, "status": rows[0]["status"], "cancelled": 0}
+        mine = self.store.query(
+            f"SELECT * FROM step WHERE run_id = ? AND status IN {_ACTIVE_SQL}", (run_id,)
+        )
+        shared: set[int] = set()
+        for r in mine:
+            ref = f"{run_id}:{r['step_no']}"
+            if any(d["run_id"] != run_id for d in self._dependents(ref)):
+                shared.add(r["step_no"])
+        stop = [r for r in mine if r["step_no"] not in shared]
+        with self.store.tx() as db:
+            for r in stop:
+                db.execute(
+                    """UPDATE step SET status = 'cancelled', error = ?, done_at = ?, worker = NULL,
+                       lease_until = NULL WHERE run_id = ? AND step_no = ?""",
+                    (reason, now, run_id, r["step_no"]),
+                )
+            self._deliver_fail(db, run_id, "cancelled", reason, now)
+            db.execute(
+                """UPDATE run SET status = 'cancelled', error = ?,
+                   finished_at = CASE WHEN EXISTS (SELECT 1 FROM step WHERE run_id = ?
+                     AND kind = 'deliver_fail' AND status = 'queued') THEN NULL ELSE ? END
+                   WHERE run_id = ?""",
+                (reason, run_id, now, run_id),
+            )
+        return {"ok": True, "status": "cancelled", "cancelled": len(stop), "kept": len(shared)}
 
     # --- 삭제 --------------------------------------------------------------
     def delete(

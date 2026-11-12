@@ -213,3 +213,77 @@ def test_ui_media_types_do_not_depend_on_system(sched, tmp_path, monkeypatch):
         assert c.get("/ui/assets/app.js").headers["content-type"].startswith("text/javascript")
         assert c.get("/ui/assets/app.css").headers["content-type"].startswith("text/css")
         assert c.get("/ui/").headers["content-type"].startswith("text/html")
+
+
+# --- 0.2 ------------------------------------------------------------------
+def test_token_protects_api_but_not_ui(calc):
+    s = Scheduler(load_project(calc), Store(), token="s3cret")
+    ui.install(s)
+    with TestClient(s.app()) as c:
+        assert c.get("/api/catalog").status_code == 401
+        assert c.post("/register", json={}).status_code == 401
+        assert c.get("/api/catalog", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+        assert c.get("/api/catalog", headers={"X-MSDF-Token": "s3cret"}).status_code == 200
+        assert c.get("/api/catalog?token=s3cret").status_code == 200
+        assert c.get("/api/catalog", headers={"X-MSDF-Token": "nope"}).status_code == 401
+        assert c.get("/health").status_code == 200
+        assert c.get("/ui/").status_code == 200
+
+
+def test_stream_sends_signal(sched):
+    with TestClient(sched.app()) as c, c.stream("GET", "/api/stream?once=true") as r:
+        body = "".join(r.iter_text())
+    assert r.headers["content-type"].startswith("text/event-stream")
+    assert "data: {" in body
+
+
+def test_cancel_api(sched):
+    sub = sched.engine.submit(Order(name="number", params={"n": 40}, requester="req"))
+    with TestClient(sched.app()) as c:
+        out = c.post(f"/api/runs/{sub.run_id}/cancel").json()
+        assert out["ok"] and out["status"] == "cancelled"
+        assert c.post("/api/runs/nope/cancel").status_code == 404
+    drain(sched)
+    assert sched.engine.run(sub.run_id)["status"] == "cancelled"
+
+
+def test_iam_editor_roundtrip(sched, calc):
+    with TestClient(sched.app()) as c:
+        got = c.get("/api/iam").json()
+        assert got["exists"] is False and "req" in got["services"]
+        body = {
+            "layers": [{"name": "tier", "kind": "ordered", "levels": ["free", "pro"]}],
+            "rules": [
+                {"type": "order", "conditions": {"service": "req", "tier": ">=pro"}},
+                {"type": "flow", "from": "src.*", "to": "mid.*", "conditions": {"tier": "any"}},
+            ],
+        }
+        tried = c.post(
+            "/api/iam/try", json={"order": "number", "requester": "req", "context": {}}
+        ).json()
+        assert tried["ok"]  # 아직 iam.yaml 없음
+        body["rules"].append(
+            {"type": "flow", "from": "mid.*", "to": "*", "conditions": {"tier": "any"}}
+        )
+        ok = c.post("/api/iam/validate", json=body).json()
+        assert ok["ok"], ok
+        saved = c.put("/api/iam", json=body).json()
+        assert saved["ok"]
+        text = (calc / "iam.yaml").read_text()
+        assert yaml.safe_load(text)["layers"]["tier"]["levels"] == ["free", "pro"]
+        assert sched.engine.iam is sched.project.iam
+        free = c.post(
+            "/api/iam/try",
+            json={"order": "number", "requester": "req", "context": {"tier": "free"}},
+        ).json()
+        pro = c.post(
+            "/api/iam/try",
+            json={"order": "number", "requester": "req", "context": {"tier": "pro"}},
+        ).json()
+        assert not free["ok"] and pro["ok"], (free, pro)
+        again = c.get("/api/iam").json()
+        assert again["exists"] and again["required_context"] == ["tier"]
+        broken = c.put(
+            "/api/iam", json={"rules": [{"type": "order", "conditions": {"nope": "x"}}]}
+        ).json()
+        assert not broken["ok"] and "nope" in broken["errors"][0]

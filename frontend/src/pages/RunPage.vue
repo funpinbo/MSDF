@@ -21,6 +21,23 @@ const { error } = usePoll(async () => {
   }
 }, 1500)
 
+const cancelling = ref(false)
+const cancelMsg = ref('')
+async function cancelRun() {
+  if (!confirm('이 실행을 취소할까요? 요청한 서비스에는 실패 배달(status="cancelled")이 갑니다.')) return
+  cancelling.value = true
+  try {
+    const out = await api.post(`/api/runs/${route.params.id}/cancel`)
+    cancelMsg.value = out.ok
+      ? `단계 ${out.cancelled}개를 멈췄습니다` + (out.kept ? ` (다른 요청과 공유하는 단계 ${out.kept}개는 계속 실행)` : '')
+      : `이미 ${out.status} 상태입니다`
+  } catch (e) {
+    cancelMsg.value = e.message
+  } finally {
+    cancelling.value = false
+  }
+}
+
 const failed = computed(() => data.value?.steps.find((s) => s.status === 'failed'))
 const span = computed(() => {
   const st = data.value?.steps || []
@@ -52,6 +69,9 @@ function bar(s) {
           <h2>{{ data.run.order_name }}</h2>
           <StatusBadge :status="data.run.status === 'running' ? 'running' : data.run.status" />
           <span class="mono faint">{{ data.run.run_id }}</span>
+          <div class="grow" />
+          <span v-if="cancelMsg" class="faint">{{ cancelMsg }}</span>
+          <button v-if="data.run.status === 'running'" class="danger" :disabled="cancelling" @click="cancelRun">실행 취소</button>
         </div>
         <div class="meta">
           <span><span class="faint">요청</span> {{ data.run.requester }}</span>

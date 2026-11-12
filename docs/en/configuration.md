@@ -56,6 +56,10 @@ and applies it to the engine immediately (runs already in progress finish with t
 
 ## IAM file
 
+You can also edit layers and rules as tables on the web UI's **Permissions** page. It validates on every change; saving writes an `iam.yaml`
+in the same format and applies it to the engine at once (runs already accepted are not affected). **Try a permission** on the same page checks
+"would this order from this service pass?" without running anything.
+
 Decides who may make which request, and where data may flow. One per project.
 **Without this file, no permission checks are done** (everything is allowed, and `msdf up` warns). With the file, the default is deny.
 
@@ -157,10 +161,16 @@ keys do not cover the layers used by the IAM rules.
 ## The `msdf` command
 
 ```bash
-msdf check [--root .] [--config DIR] [--allow-external]
-msdf up    [--root .] [--config DIR] [--allow-external]
-           [--host 127.0.0.1] [--port 8787] [--db PATH]
+msdf init  [DIR]                                   # a new project skeleton (three services, a DAG, iam.yaml)
+msdf check [--root .] [--config DIR] [--allow-external] [--no-cache]
+msdf up    [--root .] [--config DIR] [--allow-external] [--no-cache]
+           [--host 127.0.0.1] [--port 8787] [--db PATH] [--token SECRET]
            [--lease-ttl 60] [--keep-generations 3] [--keep-versions 3] [--no-ui] [--ui-dist DIR]
+
+# ask a running engine (--engine defaults to MSDF_SCHEDULER or http://127.0.0.1:8787, --token to MSDF_TOKEN)
+msdf status [--engine URL] [--token SECRET]        # which services are connected, last hour summary
+msdf runs   [--engine URL] [--token SECRET] [--limit 20] [--status running|done|failed|cancelled]
+msdf cancel RUN_ID [--engine URL] [--token SECRET] # cancel a running run
 ```
 
 | Option | Default | Meaning |
@@ -174,7 +184,22 @@ msdf up    [--root .] [--config DIR] [--allow-external]
 | `--keep-versions` | 3 | how many results that differ only by version to keep hot for the same position |
 | `--no-ui` | off | do not serve the web UI |
 | `--ui-dist` | `ui/dist` inside the package | a built web UI folder. Also settable with the `MSDF_UI_DIST` environment variable |
+| `--token` | `MSDF_TOKEN` | engine token. When set, services, the web UI, `msdf status` and so on must all send the same value |
+| `--no-cache` | off | do not use the code analysis cache (`<config>/.msdf/scan.cache`), which skips re-reading unchanged files |
 
-Service-side environment variable: `MSDF_SCHEDULER` (engine address, default `http://127.0.0.1:8787`).
+Service-side environment variables: `MSDF_SCHEDULER` (engine address, default `http://127.0.0.1:8787`), `MSDF_TOKEN` (engine token).
 
-> The engine API and the web UI have no authentication. `msdf up` warns if `--host` is anything other than `127.0.0.1`. Open it only on a trusted network.
+### Engine token
+
+By default the engine has no authentication and listens only on `127.0.0.1`. Use a token when you open it to other machines.
+
+```bash
+export MSDF_TOKEN=$(python -c "import secrets; print(secrets.token_urlsafe(24))")
+msdf up --host 0.0.0.0          # reads MSDF_TOKEN (or the --token value)
+MSDF_TOKEN=... python source.py # services use the same value
+```
+
+- Requests from services to the engine and from the engine to services (step dispatch) both check `Authorization: Bearer <token>`.
+- The web UI asks for the token the first time it opens and keeps it in that browser only. Only the static `/ui` files and `/health` are open without it.
+- The token does not encrypt traffic. On an untrusted network, put the engine behind an HTTPS proxy or an SSH tunnel.
+- `msdf up` warns if `--host` is anything other than `127.0.0.1` and no token is set.

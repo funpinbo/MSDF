@@ -4,9 +4,7 @@ from collections import Counter
 
 from ms_dataflow import action, service, start
 
-
-@service("processing")
-def processing(): ...
+service("processing")
 
 
 @action(inputs=["vectors"], outputs=["summary", "keywords"])

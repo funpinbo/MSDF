@@ -65,12 +65,17 @@ class Client:
         *,
         host: str = "127.0.0.1",
         port: int = 0,
+        token: str | None = None,
     ) -> None:
         self.registry = registry
+        self.token = token
         self.scheduler = scheduler.rstrip("/")
         self.instance_id = uuid.uuid4().hex[:12]
         self.settings = Settings()
-        self.http = httpx.Client(timeout=10.0, headers={"Content-Type": "application/json"})
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        self.http = httpx.Client(timeout=10.0, headers=headers)
         self.host = host
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -87,7 +92,7 @@ class Client:
 
         from ms_dataflow.execute.worker import Worker
 
-        self.worker = Worker(self.registry, self.report, lambda: self.instance_id)
+        self.worker = Worker(self.registry, self.report, lambda: self.instance_id, self.token)
         config = uvicorn.Config(self.worker.app(), log_level="warning", lifespan="off")
         self._server = uvicorn.Server(config)
         self._server.install_signal_handlers = lambda: None  # 사용자 앱의 시그널을 건드리지 않는다
@@ -126,6 +131,11 @@ class Client:
             )
         except httpx.HTTPError:
             return False
+        if resp.status_code == 401:
+            raise RegistrationError(
+                "엔진이 토큰을 요구합니다. 엔진과 같은 값을 MSDF_TOKEN 환경 변수나 "
+                "start(token=...)로 주세요."
+            )
         if resp.status_code == 409:
             detail = resp.json().get("detail", {})
             raise RegistrationError(str(detail.get("message", resp.text)))
@@ -260,11 +270,13 @@ def start(
     root: str | None = None,
     timeout: float | None = None,
     block: bool = False,
+    token: str | None = None,
 ) -> None:
     """이 프로세스를 엔진에 붙인다. 등록이 끝나면 바로 반환한다(논블로킹).
 
     - scheduler: 엔진 주소. 기본은 환경 변수 MSDF_SCHEDULER 또는 http://127.0.0.1:8787
     - required=False면 엔진이 없을 때 경고만 내고, 백그라운드에서 계속 연결을 시도한다.
+    - token: 엔진을 msdf up --token(또는 MSDF_TOKEN)으로 띄웠다면 같은 값. 기본은 MSDF_TOKEN
     - block=True면 반환하지 않고 Ctrl+C(SIGINT)나 SIGTERM을 받을 때까지 기다린다.
       자기 메인 루프가 없는 서비스(Action만 제공하는 서비스)에 쓴다.
     """
@@ -283,12 +295,18 @@ def start(
             file=entry,
             fix="start()는 @service가 있는 파일(또는 그 파일을 import하는 파일)에서 호출하세요.",
         )
-    client = Client(registry, scheduler, host=host, port=port)
+    token = token or os.environ.get("MSDF_TOKEN") or None
+    client = Client(registry, scheduler, host=host, port=port, token=token)
     client.serve()
     deadline = None if timeout is None else time.time() + timeout
     warned = False
     while True:
-        if client.register_once():
+        try:
+            ok = client.register_once()
+        except RegistrationError:
+            client.stop()
+            raise
+        if ok:
             break
         if not required:
             log.warning(

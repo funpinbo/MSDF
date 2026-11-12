@@ -5,9 +5,7 @@ from collections import Counter
 
 from ms_dataflow import action, service, start
 
-
-@service("embedding")
-def embedding(): ...
+service("embedding")
 
 
 @action(inputs=["docs"], outputs=["out"], retries=3)

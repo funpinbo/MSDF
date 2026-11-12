@@ -44,7 +44,17 @@ def _remember(fn: Callable[..., Any]) -> None:
 
 # --- @service --------------------------------------------------------------
 def service(name: str) -> Callable[[F], F]:
-    """서비스의 진입점을 표시한다. 이 함수의 파일에서 import로 닿는 Action이 이 서비스 것이다."""
+    """서비스를 선언한다. 이 파일에서 import로 닿는 Action이 이 서비스 것이다.
+
+    두 가지로 쓴다::
+
+        service("search")          # 파일 최상위에 한 줄. 진입 함수가 없는 서비스
+
+        @service("app")            # 서비스의 진입 함수에 붙인다
+        def app(day: str): ...
+
+    소속 판정은 코드를 실행하지 않고 ast로 하므로, 어느 쪽이든 결과는 같다.
+    """
     if not isinstance(name, str) or not name.isidentifier():
         raise DeclarationError(
             f"서비스 이름은 파이썬 식별자 형식의 문자열이어야 합니다: {name!r}",
