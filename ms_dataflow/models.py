@@ -134,6 +134,7 @@ class Dag(Frozen):
     edges: tuple[Edge, ...] = ()
     result: SlotRef
     deliveries: tuple[Delivery, ...] = Field(min_length=1)
+    layout: dict[str, tuple[float, float]] = Field(default_factory=dict)  # 편집기의 노드 위치
     source: str | None = Field(default=None, exclude=True)
 
 

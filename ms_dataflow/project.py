@@ -21,6 +21,8 @@ class Project:
     resolvers: ResolverConfig
     iam: Iam | None
     warnings: list[str] = field(default_factory=list)
+    config_dir: Path | None = None
+    strict_services: bool = True
 
 
 def load_project(
@@ -58,4 +60,4 @@ def load_project(
     except LoadError as e:
         errors.append(e)
     raise_collected(errors)
-    return Project(rootp, registry, dags, resolvers, iam, warnings)
+    return Project(rootp, registry, dags, resolvers, iam, warnings, cfg, strict_services)

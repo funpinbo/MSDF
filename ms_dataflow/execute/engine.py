@@ -249,8 +249,13 @@ class Engine:
             ),
         )
         db.execute(
-            "UPDATE run SET result_lineage = ?, result_artifact = ? WHERE run_id = ?",
-            (p.result_lineage, p.result_artifact, run_id),
+            "UPDATE run SET result_lineage = ?, result_artifact = ?, plan = ? WHERE run_id = ?",
+            (
+                p.result_lineage,
+                p.result_artifact,
+                _j({"steps": [s.node for s in p.steps], "cached": p.cached, "joined": p.joined}),
+                run_id,
+            ),
         )
         return p
 

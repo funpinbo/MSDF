@@ -57,6 +57,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ms_dataflow"]
+# 웹 UI 빌드 결과는 저장소에 없다. 패키지를 만들기 전에 frontend에서 npm run build를 했다면 함께 넣는다.
+artifacts = ["ms_dataflow/ui/dist/**"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["frontend/node_modules", "design"]
 
 [dependency-groups]
 dev = [

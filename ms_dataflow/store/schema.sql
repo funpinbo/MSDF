@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS run (
   result_artifact TEXT,
   status          TEXT NOT NULL,      -- running | done | failed
   replans         INTEGER NOT NULL DEFAULT 0,
+  plan            TEXT,               -- {"steps": [노드], "cached": [노드], "joined": [노드]} (JSON)
   error           TEXT,
   created_at      REAL NOT NULL,
   finished_at     REAL
@@ -82,6 +83,8 @@ CREATE TABLE IF NOT EXISTS step (
   PRIMARY KEY (run_id, step_no)
 );
 CREATE INDEX IF NOT EXISTS idx_step_status ON step(status);
+CREATE INDEX IF NOT EXISTS idx_step_queued ON step(queued_at);
+CREATE INDEX IF NOT EXISTS idx_run_created ON run(created_at);
 -- 같은 단계를 두 번 동시에 만들지 않는다. 끝난 단계는 제약에서 빠진다.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_inflight ON step(step_key)
   WHERE kind = 'produce' AND status IN ('queued', 'leased', 'running', 'saved');

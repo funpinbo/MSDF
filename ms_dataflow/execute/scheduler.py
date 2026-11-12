@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 
 from ms_dataflow.errors import OrderError, PermissionDenied, ServiceUnavailable
 from ms_dataflow.execute.engine import Engine
+from ms_dataflow.metrics import LogBuffer
 from ms_dataflow.models import (
     DeleteRequest,
     Order,
@@ -51,6 +52,7 @@ class Instance:
     busy: tuple[str, int] | None = None
     sent_at: float = 0.0
     context_keys: tuple[str, ...] | None = None
+    registered_at: float = 0.0
 
 
 @dataclass
@@ -75,6 +77,7 @@ class Scheduler:
         self._http: httpx.AsyncClient | None = None
         self._rr = 0
         self.extensions: dict[str, Any] = {}
+        self.logs = LogBuffer()
 
     # --- 공통 ---------------------------------------------------------------
     async def db(self, fn: Callable[..., T], *args: Any) -> T:
@@ -146,6 +149,7 @@ class Scheduler:
             actions=dict(incoming.actions),
             last_seen=time.time(),
             context_keys=req.context_keys,
+            registered_at=time.time(),
         )
         self._refresh_available()
         for w in warnings:
@@ -252,6 +256,10 @@ class Scheduler:
         sched = self
 
         async def lifespan(app: FastAPI) -> Any:
+            msdf_log = logging.getLogger("msdf")
+            msdf_log.addHandler(sched.logs)
+            if msdf_log.level == logging.NOTSET or msdf_log.level > logging.INFO:
+                msdf_log.setLevel(logging.INFO)
             sched._wake = asyncio.Event()
             sched._http = httpx.AsyncClient(headers={"Content-Type": "application/json"})
             async with asyncio.TaskGroup() as tg:
@@ -262,6 +270,7 @@ class Scheduler:
                     for t in loops:
                         t.cancel()
             await sched._http.aclose()
+            msdf_log.removeHandler(sched.logs)
 
         app = FastAPI(title="MSDF", lifespan=lifespan)
 
@@ -323,7 +332,18 @@ class Scheduler:
                 inst.last_seen = time.time()
             await sched.db(sched.engine.complete, rep.result, None)
             r = rep.result
-            log.info("결과: %s:%s %s", r.run_id, r.step_no, "ok" if r.ok else r.error_kind)
+            if r.ok:
+                log.info("성공: %s:%s", r.run_id, r.step_no)
+            else:
+                why = {"action": "Action 예외", "lost": "입력 데이터 유실", "other": "실행 오류"}
+                last = (r.error or "").strip().splitlines()[-1:] or [""]
+                log.warning(
+                    "실패(%s): %s:%s %s",
+                    why.get(r.error_kind or "", r.error_kind),
+                    r.run_id,
+                    r.step_no,
+                    last[0][:200],
+                )
             sched.kick()
             return {"ok": True}
 

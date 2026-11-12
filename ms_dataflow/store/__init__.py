@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ms_dataflow.errors import ConfigError
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _MIN_SQLITE = (3, 35, 0)
 _COLD_SCHEMA = """
 CREATE TABLE IF NOT EXISTS cold.artifact AS SELECT * FROM main.artifact WHERE 0;
