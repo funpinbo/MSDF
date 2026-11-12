@@ -124,10 +124,24 @@ queued → leased → running → saved → done
 
 ## 웹 UI
 
-`msdf up`과 함께 `http://127.0.0.1:8787/ui`에 뜹니다. 외부 의존성이 없는 페이지 하나입니다.
+`msdf up`과 함께 `http://127.0.0.1:8787/ui`에 뜹니다. Vue로 만든 화면이며, 소스(`frontend/`)만 배포하므로 한 번 빌드해야 합니다([README](../README.md#웹-ui-빌드)).
 
-- DAG를 그래프로 보고, 각 서비스가 떠 있는지 확인합니다.
-- 실행(run)을 고르면 단계마다 상태, 시도 횟수, 타임라인을 보여 주고, 캐시로 건너뛴 단계는 점선으로 표시합니다.
-- 실패한 단계와 원인(사용자 코드의 traceback)을 보여 줍니다.
+| 페이지 | 내용 |
+| --- | --- |
+| 실시간 맵 | 등록된 모든 Action을 서비스별로 묶어 한 장의 그래프로 보여 줍니다. 노드마다 완료·실패·캐시·실행 중 수와 성공률, 평균 시간을, 엣지마다 이동한 데이터 수를 2초마다 갱신합니다. 실행 중인 흐름은 움직이는 선으로 보입니다. 위쪽에 실행 성공률, 실패한 단계, 캐시 적중률 같은 요약이 있습니다 |
+| DAG 편집기 | 왼쪽 목록의 Action을 캔버스에 끌어다 놓으면 노드가 생기고, 출력 점에서 입력 점으로 끌면 연결됩니다. ☆로 결과 슬롯을, 오른쪽 패널에서 노드 옵션과 결과 배달(deliveries)을 정합니다. 바꿀 때마다 엔진이 검증하고, 저장하면 `dags/<order>.yaml`을 쓰고 엔진에 바로 반영합니다. 노드 위치는 YAML의 `layout`에 남습니다 |
+| 로그 | 실행, 단계, 서비스, DAG, 엔진 로그 탭. 서비스·DAG·상태·검색어로 거르고, 단계를 누르면 오류 원문과 입출력 데이터의 계보를 봅니다 |
+| 실행 상세 | 실행 하나의 DAG 그래프(캐시·합류·실패 표시), 단계 타임라인, 실패 위치, 결과 데이터의 계보 |
 
-같은 정보가 JSON API로도 있습니다: `/api/dags`, `/api/services`, `/api/runs`, `/api/runs/{run_id}`, `/api/artifacts/{artifact_id}`(계보).
+같은 정보가 JSON API로도 있습니다.
+
+| 경로 | 내용 |
+| --- | --- |
+| `GET /api/overview?window=초` | 맵의 모든 수치 (Action별, 엣지별, DAG별, 처리량) |
+| `GET /api/catalog` | 서비스, Action 명세, 인스턴스 |
+| `GET /api/dags`, `/api/dags/{order}` | DAG (편집기용 노드·엣지·YAML) |
+| `POST /api/dags/validate`, `PUT /api/dags/{order}`, `DELETE /api/dags/{order}` | DAG 검증, 저장, 삭제 |
+| `GET /api/runs`, `/api/runs/{run_id}` | 실행 목록과 상세 |
+| `GET /api/steps` | 단계 로그 (service, order, status, run_id, q로 거르기) |
+| `GET /api/events` | 엔진 로그 (최근 3000줄) |
+| `GET /api/artifacts/{artifact_id}` | 데이터 계보 (hot과 cold 모두) |

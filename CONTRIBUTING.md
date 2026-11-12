@@ -9,6 +9,7 @@ git clone https://github.com/funpinbo/MSDF
 cd MSDF
 uv sync --all-extras
 uv run pytest
+cd frontend && npm install && npm run build   # 웹 UI (빌드 결과는 커밋하지 않음)
 ```
 
 ## 먼저 읽을 것
@@ -33,7 +34,9 @@ uv run pytest
 | `ms_dataflow/execute/scheduler.py`, `worker.py` | HTTP 서버 양쪽 |
 | `ms_dataflow/execute/local.py` | 프로세스 하나로 돌리는 `LocalRunner` (테스트용) |
 | `ms_dataflow/ops.py` | 삭제, hot/cold 보관, 계보 조회 |
-| `ms_dataflow/ui/` | 웹 UI (의존성 없는 페이지 하나 + JSON API) |
+| `ms_dataflow/ui/` | 웹 UI가 읽는 JSON API와 빌드 결과 서빙 |
+| `ms_dataflow/metrics.py`, `dag_store.py` | UI용 집계와 로그 조회, 편집기의 DAG 검증·저장 |
+| `frontend/` | 웹 UI 소스 (Vue 3 + Vue Flow). [frontend/README.md](frontend/README.md) |
 | `tests/fixtures/calc/` | 도메인 없는 검증용 서비스. 프레임워크 테스트는 이것으로 한다 |
 
 테스트는 `tests/fixtures/calc`의 최소 서비스로 프레임워크 동작만 검증합니다. `examples/`는 사용자에게 보여 주는 예시이며,

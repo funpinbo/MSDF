@@ -127,6 +127,25 @@ pip install 'msdf[dataframe]'   # DataFrame을 Parquet으로 저장
 
 패키지 이름은 `msdf`, import 이름은 항상 `ms_dataflow`입니다.
 
+## 웹 UI 빌드
+
+`msdf up`은 `http://127.0.0.1:8787/ui`에 웹 UI를 띄웁니다. **UI는 소스만 저장소에 있고 빌드 결과는 없습니다.**
+저장소를 받은 뒤 한 번 빌드하세요 (Node.js 20 이상).
+
+```bash
+cd frontend
+npm install
+npm run build        # 결과: ms_dataflow/ui/dist
+```
+
+빌드하지 않아도 엔진과 API는 그대로 동작하며, `/ui`가 위 명령을 안내합니다. 화면 구성은 [frontend/README.md](frontend/README.md)를 보세요.
+
+| 페이지 | 하는 일 |
+| --- | --- |
+| 실시간 맵 | 서비스·Action·데이터 흐름을 한 장의 그래프로, 성공·실패·캐시 수치와 함께 |
+| DAG 편집기 | n8n처럼 Action 노드를 끌어다 놓고 연결해 DAG를 만들고 저장 |
+| 로그 | 실행, 단계, 서비스, DAG, 엔진 로그를 나눠서 조회. 실패 원인과 데이터 계보 |
+
 ## 개발
 
 ```bash
