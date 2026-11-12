@@ -6,7 +6,15 @@ import re
 from datetime import timedelta
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, JsonValue
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    JsonValue,
+    TypeAdapter,
+)
 
 _DURATION = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h|d|w)?\s*$")
 _UNITS = {"ms": 0.001, "s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, None: 1}
@@ -24,6 +32,8 @@ def parse_duration(value: Any) -> timedelta | None:
         m = _DURATION.match(value)
         if m:
             return timedelta(seconds=float(m.group(1)) * _UNITS[m.group(2)])
+        if value.startswith(("P", "-P")):  # JSON으로 오간 ISO 8601 기간
+            return TypeAdapter(timedelta).validate_python(value)
     raise ValueError(f"기간 형식이 아닙니다: {value!r} ('30s', '30m', '1h', '1d', '1w')")
 
 
@@ -197,3 +207,44 @@ class Settings(Frozen):
     keep_generations: int = 3  # N: 같은 요청의 최신 generation 몇 개를 hot에 둘지
     keep_versions: int = 3  # M: 같은 자리에서 version만 다른 복제본 몇 개를 hot에 둘지
     max_replans: int = 3
+
+
+# --- 엔진 ↔ 서비스 HTTP ----------------------------------------------------
+class RegisterRequest(Frozen):
+    instance_id: str
+    address: str
+    services: tuple[ServiceSpec, ...]
+    actions: tuple[ActionSpec, ...]
+    context_keys: tuple[str, ...] | None = None  # @context가 없으면 None
+
+
+class RegisterResponse(Frozen):
+    instance_id: str
+    settings: Settings
+    warnings: tuple[str, ...] = ()
+
+
+class OrderRequest(Frozen):
+    instance_id: str
+    requester: str
+    name: str
+    params: dict[str, JsonValue] = Field(default_factory=dict)
+    context: dict[str, str] = Field(default_factory=dict)
+
+
+class OrderResponse(Frozen):
+    run_id: str
+    lineage_key: str
+
+
+class ResultReport(Frozen):
+    instance_id: str
+    result: StepResult
+
+
+class DeleteRequest(Frozen):
+    instance_id: str
+    requester: str
+    lineage_key: str
+    cascade: bool = False
+    context: dict[str, str] = Field(default_factory=dict)

@@ -1,5 +1,6 @@
 import json
 import os
+import time
 
 from ms_dataflow import action, service
 
@@ -25,6 +26,17 @@ def maybe_fail(name):
         raise RuntimeError(f"{name} 실패 주입 ({count + 1})")
 
 
+def maybe_slow(name):
+    """CALC_SLOW에 이름이 있으면 첫 호출만 오래 걸린다 (프로세스를 죽이는 테스트용)."""
+    if os.environ.get("CALC_SLOW") != name:
+        return
+    marker = os.environ["CALC_LOG"] + ".slow"
+    if not os.path.exists(marker):
+        with open(marker, "w"):
+            pass
+        time.sleep(60)
+
+
 @service("mid")
 def mid():
     pass
@@ -34,6 +46,7 @@ def mid():
 def add(x):
     log("add", x["value"])
     maybe_fail("add")
+    maybe_slow("add")
     return {"value": x["value"] + 1}
 
 
