@@ -49,5 +49,17 @@ npm run dev          # 터미널 2 — http://localhost:5173/ui/ (/api는 엔진
 
 ## 라이선스
 
-이 디렉터리의 코드는 MSDF와 같은 MIT입니다. 의존성(Vue, Vue Flow, dagre, vue-router)도 모두 MIT이며 `npm install` 때 각자 내려받습니다.
-빌드 결과를 따로 배포한다면(예: 휠에 포함) 그 안에 의존성 코드가 들어가므로 각 라이선스 고지를 함께 넣어야 합니다.
+이 디렉터리의 코드는 MSDF와 같은 MIT입니다. 저장소에는 소스만 있고, 의존성은 `npm install` 때 각자 내려받습니다.
+
+빌드 결과에 실제로 들어가는 라이브러리:
+
+| 라이브러리 | 라이선스 |
+| --- | --- |
+| vue (@vue/runtime-dom, runtime-core, reactivity, shared) | MIT |
+| vue-router | MIT |
+| @vue-flow/core, background, controls, minimap (안에 @vueuse/core 포함) | MIT |
+| d3-zoom, d3-drag, d3-selection, d3-interpolate 등 (@vue-flow/core 안에 포함) | ISC |
+| @dagrejs/dagre | MIT |
+
+빌드 결과를 따로 배포한다면(예: 휠에 포함) 그 안에 위 코드가 들어가므로 각 저작권 고지와 라이선스 전문을 함께 넣어야 합니다.
+Vite 등 빌드 도구는 결과물에 들어가지 않습니다.

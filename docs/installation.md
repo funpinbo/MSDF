@@ -117,8 +117,9 @@ ls dist/                           # msdf-0.1.0-py3-none-any.whl
 pip install "msdf-0.1.0-py3-none-any.whl[server]"
 ```
 
-> 휠에는 UI가 쓰는 라이브러리(Vue, Vue Flow, vue-router, dagre)의 빌드된 코드가 들어갑니다. 모두 MIT 라이선스입니다.
-> 조직 안에서 쓰는 것은 문제가 없지만, 휠을 외부에 공개 배포할 때는 각 라이브러리의 라이선스 고지를 함께 넣어야 합니다.
+> 휠에는 UI가 쓰는 라이브러리의 빌드된 코드가 들어갑니다: Vue, vue-router, Vue Flow(안에 VueUse 포함), dagre는 MIT,
+> Vue Flow 안에 포함된 d3 모듈(d3-zoom, d3-drag 등)은 ISC입니다. 둘 다 허용형 라이선스라 사용에는 제약이 없지만,
+> 휠을 외부에 배포할 때는 각 라이브러리의 저작권 고지와 라이선스 전문을 함께 넣어야 합니다.
 
 ## 무엇을 어디에 설치하나
 
