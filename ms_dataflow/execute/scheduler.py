@@ -189,6 +189,16 @@ class Scheduler:
                 continue
             inst.busy = (task.run_id, task.step_no)
             inst.sent_at = time.time()
+            # 서비스가 아주 빨리 결과를 보고할 수 있으므로 보내기 전에 running으로 둔다
+            await self.db(self.engine.running, task.run_id, task.step_no)
+            log.info(
+                "실행: %s:%s %s.%s → %s",
+                task.run_id,
+                task.step_no,
+                task.service,
+                task.action,
+                inst.id,
+            )
             assert self._http is not None
             try:
                 resp = await self._http.post(
@@ -200,16 +210,7 @@ class Scheduler:
                 ok = False
                 self.drop(inst.id)
             if ok:
-                await self.db(self.engine.running, task.run_id, task.step_no)
                 sent += 1
-                log.info(
-                    "실행: %s:%s %s.%s → %s",
-                    task.run_id,
-                    task.step_no,
-                    task.service,
-                    task.action,
-                    inst.id,
-                )
             else:
                 inst.busy = None
                 await self.db(self.engine.release, task.run_id, task.step_no)

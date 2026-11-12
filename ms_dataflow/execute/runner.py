@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import os
 import traceback
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -13,11 +14,21 @@ from ms_dataflow.errors import ArtifactMissing, MsdfError
 from ms_dataflow.models import ActionSpec, SavedOutput, StepResult, StepTask
 from ms_dataflow.resolvers import ResolverPool
 
+_PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep
+
 
 def _call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     if inspect.iscoroutinefunction(fn):
         return asyncio.run(fn(*args, **kwargs))
     return fn(*args, **kwargs)
+
+
+def _user_traceback(exc: BaseException) -> str:
+    """프레임워크 내부 프레임을 빼고 사용자 코드 프레임만 남긴다."""
+    tb = exc.__traceback__
+    while tb is not None and tb.tb_frame.f_code.co_filename.startswith(_PKG):
+        tb = tb.tb_next
+    return "".join(traceback.format_exception(type(exc), exc, tb, limit=8))
 
 
 def _error(task: StepTask, kind: str, message: str, lost: str | None = None) -> StepResult:
@@ -58,8 +69,8 @@ def run_task(
             value = _call(fn, task.status or "failed")
         else:
             value = _call(fn, **kwargs, **task.params)
-    except Exception:  # noqa: BLE001 - 사용자 예외는 삼키지 않고 원문을 남긴다
-        return _error(task, "action", traceback.format_exc(limit=8))
+    except Exception as e:  # noqa: BLE001 - 사용자 예외는 삼키지 않고 원문을 남긴다
+        return _error(task, "action", _user_traceback(e))
 
     if task.kind != "produce":
         return StepResult(run_id=task.run_id, step_no=task.step_no, ok=True)

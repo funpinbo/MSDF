@@ -74,6 +74,7 @@ def cmd_up(args: argparse.Namespace) -> int:
     print(f"엔진: http://{args.host}:{args.port}  (UI: http://{args.host}:{args.port}/ui)")
     print(f"DB: {db}")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")  # type: ignore[arg-type]
     return 0
 

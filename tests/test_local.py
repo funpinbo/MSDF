@@ -169,3 +169,13 @@ def test_order_errors(calc):
 def test_settings_are_used(calc):
     with LocalRunner(calc, settings=Settings(lease_ttl=5)) as r:
         assert r.engine.settings.lease_ttl == 5
+
+
+def test_error_shows_only_user_frames(calc, monkeypatch):
+    monkeypatch.setenv("CALC_FAIL", "double")
+    with LocalRunner(calc) as r:
+        r.order("number", {"n": 1}, requester="req")
+        r.run_until_idle()
+        err = r.engine.steps(r.last.run_id)[2]["error"]
+        assert "mid.py" in err and "실패 주입" in err
+        assert "runner.py" not in err
