@@ -15,7 +15,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-import httpx
+try:
+    import httpx
+except ImportError:  # 묶음 없이 설치한 경우. 데코레이터와 msdf check는 httpx 없이 동작해야 한다
+    httpx = None  # type: ignore[assignment]
 
 from ms_dataflow.decorators import context_declared, current_context, set_backend
 from ms_dataflow.errors import ORDER_ERRORS, OrderError, RegistrationError
@@ -225,6 +228,21 @@ class Client:
 _CLIENT: list[Client] = []
 
 
+def _require_runtime() -> None:
+    try:
+        import fastapi  # noqa: F401
+        import uvicorn  # noqa: F401
+    except ImportError:
+        missing = True
+    else:
+        missing = httpx is None
+    if missing:
+        raise ImportError(
+            "start()에는 runtime 묶음이 필요합니다. "
+            'pip install "msdf[runtime]" (저장소에서는 uv sync --all-extras)로 설치하세요.'
+        )
+
+
 def _caller_file() -> str:
     for frame in inspect.stack()[2:]:
         f = frame.filename
@@ -254,6 +272,7 @@ def start(
         if block:
             _wait_forever()
         return
+    _require_runtime()
     scheduler = scheduler or os.environ.get("MSDF_SCHEDULER", DEFAULT_SCHEDULER)
     entry = _caller_file()
     project_root = root or os.path.dirname(entry)

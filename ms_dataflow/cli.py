@@ -56,8 +56,6 @@ def cmd_up(args: argparse.Namespace) -> int:
     project = _load(args)
     if project is None:
         return 1
-    import uvicorn
-
     settings = Settings(
         lease_ttl=args.lease_ttl,
         heartbeat_every=args.lease_ttl / 3,
@@ -70,6 +68,13 @@ def cmd_up(args: argparse.Namespace) -> int:
         os.environ["MSDF_UI_DIST"] = str(Path(args.ui_dist).resolve())
     try:
         app = build_app(project, db, settings, ui=not args.no_ui)
+    except ImportError as e:
+        print(
+            f"msdf up에는 server 묶음이 필요합니다 ({e.name or e}). "
+            '"pip install msdf[server]" (저장소에서는 uv sync --all-extras)로 설치하세요.',
+            file=sys.stderr,
+        )
+        return 1
     except LoadError as e:
         print(e.render(), file=sys.stderr)
         return 1
@@ -92,6 +97,8 @@ def cmd_up(args: argparse.Namespace) -> int:
     print(f"DB: {db}")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    import uvicorn
+
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")  # type: ignore[arg-type]
     return 0
 

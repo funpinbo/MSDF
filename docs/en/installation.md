@@ -37,6 +37,13 @@ cd MSDF
 uv sync --all-extras
 ```
 
+`uv sync` creates a virtual environment (`.venv`) inside the repository and installs the dependencies plus MSDF itself in **editable mode**.
+It does not copy MSDF's code; it puts a single `.pth` file containing the repository path into `.venv`, so changes to the repository's code take effect
+without reinstalling. From then on, `uv run ...` anywhere inside the repository uses this `.venv` (uv walks up to find `pyproject.toml`).
+
+> Running `uv run` without `uv sync` also makes uv create `.venv` and install MSDF automatically, but **without the extras (`server`, `runtime`)**.
+> `msdf check` then works, but `msdf up` and `start()` tell you an extra is missing. Run `uv sync --all-extras` once first.
+
 With pip:
 
 ```bash
@@ -139,6 +146,7 @@ It is safest for the engine and all services to use **the same version**. Use th
 | --- | --- |
 | `pip install msdf` fails | It is not on PyPI yet. Use one of the methods above |
 | On Windows, `msdf` or `python` fails at startup with `UnicodeDecodeError: 'cp949' codec can't decode` (or another code page) | The project path contains non-ASCII characters and Python is 3.12 or earlier, so the `.pth` file created by the editable install is read with the system code page. ① Turn on UTF-8 mode with `PYTHONUTF8=1` (PowerShell: `$env:PYTHONUTF8 = "1"`; to keep it, `setx PYTHONUTF8 1` and open a new terminal), ② move the project to an ASCII-only path (e.g. `C:\dev\MSDF`) and recreate `.venv`, or ③ use Python 3.13 or later |
+| `msdf up` says the server extra is needed, or `start()` says the runtime extra is needed | It was installed without extras. In the repository run `uv sync --all-extras`; with pip, `pip install -e ".[server]"` |
 | `msdf: command not found` | Is the virtual environment active (`source .venv/bin/activate`)? With uv, use `uv run msdf` |
 | `/ui` says the UI has not been built | `cd frontend && npm run build`, or `msdf up --ui-dist PATH` |
 | `npm run build` fails with a Node version error | Node.js 20.19+ or 22.12+ |

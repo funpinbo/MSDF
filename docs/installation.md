@@ -37,6 +37,13 @@ cd MSDF
 uv sync --all-extras
 ```
 
+`uv sync`가 저장소 안에 가상 환경(`.venv`)을 만들고, 의존성과 MSDF 자체를 **편집 가능 모드**로 설치합니다.
+MSDF 코드를 복사하지 않고 `.venv`에 "저장소 경로"를 적은 `.pth` 파일 하나만 두므로, 저장소의 코드를 고치면 다시 설치하지 않아도 바로 반영됩니다.
+이후 저장소 안 어디서든 `uv run ...`으로 실행하면 이 `.venv`를 씁니다(uv가 위쪽 폴더의 `pyproject.toml`을 찾아갑니다).
+
+> `uv sync` 없이 바로 `uv run`을 해도 uv가 `.venv`를 자동으로 만들고 MSDF를 설치하지만, **추가 묶음(`server`, `runtime`)은 빠집니다.**
+> 그러면 `msdf check`는 되지만 `msdf up`과 `start()`는 묶음이 없다고 알려 줍니다. 처음 한 번은 `uv sync --all-extras`를 하세요.
+
 pip를 쓰는 경우:
 
 ```bash
@@ -139,6 +146,7 @@ pip install "msdf-0.1.0-py3-none-any.whl[server]"
 | --- | --- |
 | `pip install msdf`가 실패한다 | 아직 PyPI에 없습니다. 위의 방법을 쓰세요 |
 | Windows에서 `msdf`나 `python`이 `UnicodeDecodeError: 'cp949' codec can't decode`를 내며 시작하지 않는다 | 프로젝트 경로에 한글이 있고 파이썬이 3.12 이하라서, 편집 가능 설치가 만든 `.pth` 파일을 cp949로 읽다 실패한 것입니다. ① `PYTHONUTF8=1`로 UTF-8 모드를 켜거나(PowerShell: `$env:PYTHONUTF8 = "1"`, 계속 쓰려면 `setx PYTHONUTF8 1` 후 새 터미널), ② 영문 경로(예: `C:\dev\MSDF`)로 옮겨 `.venv`를 다시 만들거나, ③ 파이썬 3.13 이상을 쓰세요 |
+| `msdf up`이 "server 묶음이 필요합니다", `start()`가 "runtime 묶음이 필요합니다"라고 한다 | 묶음 없이 설치되었습니다. 저장소에서는 `uv sync --all-extras`, pip라면 `pip install -e ".[server]"` |
 | `msdf: command not found` | 가상 환경을 켰는지(`source .venv/bin/activate`), uv라면 `uv run msdf` |
 | `/ui`에 "빌드되지 않았습니다"가 나온다 | `cd frontend && npm run build`, 또는 `msdf up --ui-dist 경로` |
 | `npm run build`가 Node 버전 오류를 낸다 | Node.js 20.19 이상 또는 22.12 이상 |
