@@ -1,0 +1,17 @@
+order: search_result              # 서비스와 DAG 사이의 계약 이름
+
+nodes:
+  fetch:  {service: search,     action: fetch, fresh_for: 1d}   # DAG 선언이 데코레이터보다 우선
+  embed:  {service: embedding,  action: embed}
+  refine: {service: processing, action: refine}
+
+edges:
+  - {from: fetch.out, to: embed.docs}
+  - {from: embed.out, to: refine.vectors}
+
+result: refine.summary            # order의 응답이 되는 슬롯
+
+deliveries:
+  - requester: chatbot
+    on_success: chatbot.on_search_result
+    on_fail:    chatbot.on_search_failed        # 필수

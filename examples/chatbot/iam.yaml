@@ -1,0 +1,11 @@
+# 전역 규칙집. DAG나 artifact 이름이 나오지 않는다.
+layers:
+  account: {kind: ordered, levels: [viewer, analyst, admin]}
+  service: {kind: flat, members: [chatbot, search, embedding, processing]}
+
+rules:                              # 기본 거부
+  - {type: order, account: ">=analyst", service: chatbot}
+  - {type: flow, from: search.fetch,      to: embedding.embed,          account: ">=analyst"}
+  - {type: flow, from: embedding.*,       to: processing.*,             account: ">=analyst"}
+  - {type: flow, from: processing.refine, to: chatbot.on_search_result, account: any}
+  - {type: delete, account: ">=admin", service: chatbot, target: processing.refine.*}

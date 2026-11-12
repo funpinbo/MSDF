@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# MSDF 런타임 산출물
+.msdf/
+*.db
+*.db-wal
+*.db-shm
+
+# UI 빌드
+ms_dataflow/ui/dist/
+node_modules/
+
+# 에디터
+.vscode/
+.idea/
+.DS_Store
+
+# 설계 노트 (메인테이너용, 저장소에 올리지 않음)
+design/
