@@ -41,11 +41,9 @@ def _summary(project: Project) -> str:
 
 def build_app(project: Project, db: str, settings: Settings, *, ui: bool = True) -> object:
     from ms_dataflow.execute.scheduler import Scheduler
-    from ms_dataflow.ops import install as install_ops
     from ms_dataflow.store import Store
 
     sched = Scheduler(project, Store(db), settings)
-    install_ops(sched)
     if ui:
         from ms_dataflow.ui import install as install_ui
 

@@ -240,6 +240,7 @@ class Scheduler:
                 log.warning("심박 끊김 → 인스턴스 정리: %s", inst.id)
                 self.drop(inst.id)
                 await self.db(self.engine.release_worker, inst.id)
+        await self.db(self.engine.purge)
         n = await self.db(self.engine.reap, None)
         if n:
             log.warning("lease 만료 → %d개 단계 재큐잉", n)
@@ -327,15 +328,14 @@ class Scheduler:
 
         @app.post("/delete")
         async def delete(req: DeleteRequest) -> dict[str, Any]:
-            handler = sched.extensions.get("delete")
-            if handler is None:
-                raise HTTPException(501, {"code": "order_error", "message": "삭제 미지원"})
             inst = sched.instances.get(req.instance_id)
             if inst is None or req.requester not in inst.services:
                 raise HTTPException(
                     403, {"code": "order_error", "message": "등록되지 않은 인스턴스"}
                 )
-            out: dict[str, Any] = await sched.db(handler, req)
+            out: dict[str, Any] = await sched.db(
+                sched.engine.delete, req.requester, req.context, req.lineage_key, req.cascade
+            )
             return out
 
         @app.get("/health")

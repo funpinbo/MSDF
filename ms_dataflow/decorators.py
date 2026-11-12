@@ -186,6 +186,8 @@ def context_declared() -> bool:
 class OrderBackend(Protocol):
     def submit(self, name: str, params: dict[str, Any], caller_file: str) -> str: ...
 
+    def delete(self, key: str, cascade: bool, caller_file: str) -> dict[str, Any]: ...
+
 
 _BACKEND: list[OrderBackend] = []
 
@@ -206,6 +208,17 @@ def order(name: str, params: dict[str, Any] | None = None) -> str:
         raise OrderError("엔진에 연결되지 않았습니다. 서비스 시작 시 start()를 먼저 호출하세요.")
     caller = _realpath(sys._getframe(1).f_code.co_filename)
     return _BACKEND[0].submit(name, dict(params or {}), caller)
+
+
+def delete(key: str, *, cascade: bool = False) -> int:
+    """order()가 돌려준 키로 만든 데이터를 지운다. 지운 Artifact 수를 돌려준다.
+
+    IAM의 delete 규칙으로 검사한다. cascade=True면 그 데이터로 만든 하위 데이터도 지운다.
+    """
+    if not _BACKEND:
+        raise OrderError("엔진에 연결되지 않았습니다. 서비스 시작 시 start()를 먼저 호출하세요.")
+    caller = _realpath(sys._getframe(1).f_code.co_filename)
+    return len(_BACKEND[0].delete(key, cascade, caller)["deleted"])
 
 
 # --- 실행 시점에 함수 찾기 ---------------------------------------------------

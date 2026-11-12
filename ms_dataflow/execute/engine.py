@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Protocol
 
-from ms_dataflow import ids
+from ms_dataflow import ids, ops
 from ms_dataflow.config.dag import ancestors, delivery_for
 from ms_dataflow.config.resolvers import ResolverConfig
 from ms_dataflow.errors import (
@@ -46,6 +46,8 @@ class Authorizer(Protocol):
     def check_order(self, order: Order, dag: Dag, delivery: Delivery) -> list[str]:
         """막힌 엣지 목록. 비어 있으면 허용."""
         ...
+
+    def delete_allowed(self, requester: str, context: dict[str, str], target: str) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -80,7 +82,7 @@ class Engine:
         self.clock = clock
         self.available: set[str] | None = None  # None이면 레지스트리의 서비스가 모두 있다고 본다
         self._last_now = 0.0
-        self.on_register: list[Callable[[list[str]], None]] = []
+        self.on_register: list[Callable[[list[str]], object]] = [lambda c: ops.retain(self, c)]
 
     def now(self) -> float:
         # generation이 겹치지 않도록 단조 증가시킨다
@@ -599,6 +601,15 @@ class Engine:
                 ).fetchone()
                 db.execute("UPDATE run SET replans = replans + 1 WHERE run_id = ?", (run_id,))
                 self._enqueue(run_id, dag, delivery, order, self.now(), first_no=next_no)
+
+    # --- 삭제 --------------------------------------------------------------
+    def delete(
+        self, requester: str, context: dict[str, str], lineage_key: str, cascade: bool = False
+    ) -> dict[str, Any]:
+        return ops.delete(self, requester, context, lineage_key, cascade)
+
+    def purge(self) -> int:
+        return ops.purge(self)
 
     # --- 조회 --------------------------------------------------------------
     def run(self, run_id: str) -> dict[str, Any] | None:

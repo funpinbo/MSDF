@@ -71,6 +71,12 @@ class LocalRunner:
         )
         return self.last.lineage_key
 
+    def delete(self, key: str, cascade: bool, caller_file: str) -> dict[str, Any]:
+        requester = self.project.registry.owner_of(caller_file)
+        if requester is None:
+            raise OrderError(f"{caller_file}이 어느 서비스에 속하는지 알 수 없습니다.")
+        return self.engine.delete(requester, current_context(), key, cascade)
+
     def step_once(self) -> list[StepResult]:
         results = []
         for task in self.engine.ready():
