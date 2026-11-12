@@ -101,7 +101,12 @@ class Client:
 
     # --- 등록과 심박 ----------------------------------------------------------
     def _register_request(self) -> RegisterRequest:
-        keys = tuple(current_context()) if context_declared() else None
+        keys: tuple[str, ...] | None = None
+        if context_declared():
+            try:
+                keys = tuple(current_context())
+            except Exception as e:  # noqa: BLE001 - 요청 밖에서는 값을 못 만들 수 있다
+                log.warning("MSDF: 등록 시 @context를 부르지 못해 키 검사를 건너뜁니다: %s", e)
         return RegisterRequest(
             instance_id=self.instance_id,
             address=self.address,
