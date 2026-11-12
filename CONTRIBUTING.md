@@ -5,8 +5,8 @@
 ## 시작하기
 
 ```bash
-git clone https://github.com/OWNER/msdf
-cd msdf
+git clone https://github.com/funpinbo/MSDF
+cd MSDF
 uv sync --all-extras
 uv run pytest
 ```

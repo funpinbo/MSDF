@@ -32,6 +32,11 @@ runtime = [
 server = [
     "msdf[runtime]",
 ]
+# DataFrame을 Parquet으로 저장
+dataframe = [
+    "pandas>=2.2",
+    "pyarrow>=17",
+]
 
 [project.scripts]
 msdf = "ms_dataflow.cli:main"
@@ -42,9 +47,9 @@ file = "ms_dataflow.resolvers.file:FileResolver"
 sqlite = "ms_dataflow.resolvers.sqlite:SqliteResolver"
 
 [project.urls]
-Homepage = "https://github.com/OWNER/msdf"
-Documentation = "https://github.com/OWNER/msdf/tree/main/docs"
-Issues = "https://github.com/OWNER/msdf/issues"
+Homepage = "https://github.com/funpinbo/MSDF"
+Documentation = "https://github.com/funpinbo/MSDF/tree/main/docs"
+Issues = "https://github.com/funpinbo/MSDF/issues"
 
 [build-system]
 requires = ["hatchling"]
@@ -65,6 +70,10 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["design"]
+
+[tool.ruff.format]
+exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
@@ -72,7 +81,13 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
+exclude = ["^examples/", "^tests/fixtures/"]
+
+[[tool.mypy.overrides]]
+module = ["pandas", "pandas.*", "pyarrow", "pyarrow.*", "yaml"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

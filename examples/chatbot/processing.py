@@ -6,7 +6,7 @@ def processing(): ...
 
 
 @action(inputs=["vectors"], outputs=["summary", "keywords"])
-def refine(vectors): ...     # 반환 순서 = outputs 순서
+def refine(vectors): ...  # 반환 순서 = outputs 순서
 
 
 if __name__ == "__main__":

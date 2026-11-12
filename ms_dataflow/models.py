@@ -1,1 +1,199 @@
-"""TODO: 구현 전. docs/how-it-works.md, docs/roadmap.md 참고."""
+"""Pydantic 모델. YAML 검증, HTTP 스키마, 레지스트리 내부 표현이 모두 같은 타입을 쓴다."""
+
+from __future__ import annotations
+
+import re
+from datetime import timedelta
+from typing import Annotated, Any, Literal
+
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, JsonValue
+
+_DURATION = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h|d|w)?\s*$")
+_UNITS = {"ms": 0.001, "s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, None: 1}
+
+
+def parse_duration(value: Any) -> timedelta | None:
+    """ "30m", "1d", 90(초) 같은 값을 timedelta로."""
+    if value is None or isinstance(value, timedelta):
+        return value
+    if isinstance(value, bool):
+        raise ValueError("기간은 '30m', '1d' 같은 문자열이어야 합니다")
+    if isinstance(value, (int, float)):
+        return timedelta(seconds=float(value))
+    if isinstance(value, str):
+        m = _DURATION.match(value)
+        if m:
+            return timedelta(seconds=float(m.group(1)) * _UNITS[m.group(2)])
+    raise ValueError(f"기간 형식이 아닙니다: {value!r} ('30s', '30m', '1h', '1d', '1w')")
+
+
+Duration = Annotated[timedelta | None, BeforeValidator(parse_duration)]
+
+_NAME = r"[A-Za-z_][A-Za-z0-9_]*"
+_REF = re.compile(rf"^{_NAME}\.{_NAME}$")
+_PATTERN = re.compile(r"^[A-Za-z0-9_*?]+(\.[A-Za-z0-9_*?]+){0,2}$")
+
+
+def _check_ref(value: str) -> str:
+    if not _REF.match(value):
+        raise ValueError(f"'이름.이름' 형식이어야 합니다: {value!r}")
+    return value
+
+
+def _check_pattern(value: str) -> str:
+    if not _PATTERN.match(value):
+        raise ValueError(f"'서비스.액션' 패턴이어야 합니다 (* 사용 가능): {value!r}")
+    return value
+
+
+SlotRef = Annotated[str, AfterValidator(_check_ref)]
+"""``node.slot``"""
+ActionRef = Annotated[str, AfterValidator(_check_ref)]
+"""``service.action``"""
+ActionPattern = Annotated[str, AfterValidator(_check_pattern)]
+"""``service.action`` 또는 ``service.*`` 같은 패턴"""
+
+
+def split_ref(ref: str) -> tuple[str, str]:
+    a, b = ref.split(".", 1)
+    return a, b
+
+
+class Frozen(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+# --- 선언 -----------------------------------------------------------------
+class ActionSpec(Frozen):
+    """데코레이터가 선언한 Action 메타. ast 분석으로 만든다."""
+
+    service: str
+    name: str
+    inputs: tuple[str, ...] = ()
+    outputs: tuple[str, ...] = ("out",)
+    params: tuple[str, ...] = ()
+    version: str
+    retries: int = 0
+    retry_delay: float = 0.0
+    fresh_for: Duration = None
+    file: str
+    lineno: int
+    args: tuple[str, ...] = ()
+    is_async: bool = False
+
+    @property
+    def ref(self) -> str:
+        return f"{self.service}.{self.name}"
+
+
+class ServiceSpec(Frozen):
+    name: str
+    file: str
+    lineno: int
+    actions: tuple[str, ...] = ()
+    orders: tuple[str, ...] = ()
+    files: tuple[str, ...] = ()
+
+
+# --- DAG -------------------------------------------------------------------
+class DagNode(Frozen):
+    service: str
+    action: str
+    fresh_for: Duration = None
+    retries: int | None = None
+    retry_delay: float | None = None
+    # version은 없다. 선언하면 extra="forbid"에 걸려 로딩 오류가 된다.
+
+
+class Edge(Frozen):
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    from_: SlotRef = Field(alias="from")
+    to: SlotRef
+
+
+class Delivery(Frozen):
+    requester: str
+    on_success: ActionRef
+    on_fail: ActionRef  # Optional이 아니다. 빠지면 검증 실패
+
+
+class Dag(Frozen):
+    order: str
+    nodes: dict[str, DagNode]
+    edges: tuple[Edge, ...] = ()
+    result: SlotRef
+    deliveries: tuple[Delivery, ...] = Field(min_length=1)
+    source: str | None = Field(default=None, exclude=True)
+
+
+# --- 실행 ------------------------------------------------------------------
+class Order(Frozen):
+    name: str
+    params: dict[str, JsonValue] = Field(default_factory=dict)
+    requester: str
+    context: dict[str, str] = Field(default_factory=dict)
+
+
+StepKind = Literal["produce", "deliver", "deliver_fail"]
+StepStatus = Literal["queued", "leased", "running", "saved", "done", "failed", "cancelled"]
+ACTIVE: tuple[StepStatus, ...] = ("queued", "leased", "running", "saved")
+
+
+class InputRef(Frozen):
+    artifact_id: str
+    backend: dict[str, Any] = Field(default_factory=dict)
+
+
+class OutputRef(Frozen):
+    lineage_key: str
+    backend: dict[str, Any] = Field(default_factory=dict)
+
+
+class StepTask(Frozen):
+    """Scheduler가 Worker에 보내는 실행 지시."""
+
+    run_id: str
+    step_no: int
+    kind: StepKind
+    service: str
+    action: str
+    generation: float | None = None
+    inputs: dict[str, InputRef] = Field(default_factory=dict)
+    params: dict[str, JsonValue] = Field(default_factory=dict)
+    outputs: dict[str, OutputRef] = Field(default_factory=dict)
+    status: str | None = None  # deliver_fail일 때 "failed" | "cancelled"
+    attempt: int = 1
+
+
+class SavedOutput(Frozen):
+    slot: str
+    artifact_id: str
+    lineage_key: str
+    location: str
+    checksum: str
+    nbytes: int = 0
+
+
+ErrorKind = Literal["action", "lost", "other"]
+
+
+class StepResult(Frozen):
+    run_id: str
+    step_no: int
+    ok: bool
+    outputs: tuple[SavedOutput, ...] = ()
+    error: str | None = None
+    error_kind: ErrorKind | None = None
+    lost_artifact: str | None = None
+
+
+class Settings(Frozen):
+    """시간 값과 보관 정책. 전부 설정으로 바꿀 수 있다."""
+
+    lease_ttl: float = 60.0
+    heartbeat_every: float = 20.0
+    reaper_every: float = 10.0
+    keep_generations: int = 3  # N: 같은 요청의 최신 generation 몇 개를 hot에 둘지
+    keep_versions: int = 3  # M: 같은 자리에서 version만 다른 복제본 몇 개를 hot에 둘지
+    max_replans: int = 3
