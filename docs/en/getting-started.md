@@ -44,9 +44,26 @@ The sample documents and questions are in Korean ("When will I get a refund?", "
 `실행한 단계` is "steps executed". When the same question is asked again, none of the three steps run (`없음 (캐시: …)` = "none (cached: …)")
 and the answer comes from stored results.
 
-### Engine and services as separate processes
+> `run_local.py` runs its own engine and DB inside its process and then exits, so **it does not show up in the web UI of `msdf up`.**
+> To see it in the UI, start the engine and attach the services to it, as below.
 
-This is how it looks in real use. Open five terminals in the `examples/chatbot` folder.
+### Watch it in the web UI
+
+Open two terminals in the `examples/chatbot` folder.
+
+```bash
+uv run msdf up                      # terminal 1 — engine (Scheduler + DB + web UI)
+```
+
+```bash
+uv run python run_services.py       # terminal 2 — attaches the four services and sends a sample question every 3 seconds
+```
+
+Open `http://127.0.0.1:8787/ui` and runs start piling up right away. Ctrl+C stops all services.
+
+### Engine and each service as its own process
+
+This is how it looks in real use: every service runs in its own process. Open five terminals in the `examples/chatbot` folder.
 
 ```bash
 uv run msdf up                  # terminal 1 — engine (Scheduler + DB + web UI)

@@ -20,8 +20,18 @@ uv run python run_local.py "환불은 언제 되나요" "환불은 언제 되나
 ```
 
 두 번째 질문은 같은 요청이므로 단계를 하나도 실행하지 않고 캐시에서 답합니다.
+이 데모는 자기 프로세스 안에 따로 엔진을 만들어 돌므로 **`msdf up`의 웹 UI에는 나타나지 않습니다.**
 
-## 여러 프로세스로 실행
+## 웹 UI에서 보기 (명령 두 개)
+
+```bash
+uv run msdf up                      # 터미널 1 — 엔진. http://127.0.0.1:8787/ui
+uv run python run_services.py       # 터미널 2 — 서비스 넷을 엔진에 붙이고 예시 질문을 3초마다 보낸다
+```
+
+웹 UI의 실시간 맵, 로그에 실행이 바로 쌓입니다. Ctrl+C로 서비스를 모두 끕니다. 질문 간격은 `ASK_EVERY=1`처럼 바꿉니다.
+
+## 여러 프로세스로 하나씩 실행
 
 ```bash
 uv run msdf up                  # 터미널 1 — 엔진. http://127.0.0.1:8787/ui 에서 흐름을 볼 수 있다
@@ -43,3 +53,5 @@ uv run python chatbot.py        # 터미널 5 — 질문을 입력한다 (빈 �
 | `iam.yaml` | 계정 등급별 권한 |
 | `resolvers.yaml` | 검색 결과는 SQLite, 나머지는 파일에 저장 |
 | `sample_docs.json` | 예시 문서 |
+| `run_local.py` | 프로세스 하나로 돌려 보는 데모 (자기 엔진, UI 없음) |
+| `run_services.py` | 실행 중인 엔진에 서비스 넷을 붙이고 질문을 계속 보낸다 (UI용) |

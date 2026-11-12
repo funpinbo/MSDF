@@ -1,5 +1,9 @@
 """엔진과 서비스 넷을 프로세스 하나에서 돌려 보는 데모. (테스트와 체험용)
 
+자기 프로세스 안에 따로 엔진과 DB(.msdf/local.db)를 만들어 돌고 끝나므로,
+msdf up의 웹 UI에는 나타나지 않는다.
+웹 UI에서 흐름을 보려면 run_services.py를 쓴다.
+
     python run_local.py "환불은 언제 되나요"
 
 실제 운영처럼 따로 띄우려면 README의 '여러 프로세스로 실행'을 보세요.
@@ -29,6 +33,7 @@ if __name__ == "__main__":
             cached = f" (캐시: {', '.join(plan.cached)})" if plan.cached else ""
             print(f"  실행한 단계: {', '.join(s.node for s in plan.steps) or '없음'}{cached}")
     print(
-        "\n(웹 UI는 이 데모에는 없습니다. "
-        "uv run msdf up으로 엔진을 띄우면 http://127.0.0.1:8787/ui 에서 볼 수 있습니다.)"
+        "\n(이 데모는 자기 프로세스 안의 엔진으로 돌았으므로 "
+        "msdf up의 웹 UI에는 나타나지 않습니다.\n"
+        " UI에서 보려면: 터미널 1에서 uv run msdf up, 터미널 2에서 uv run python run_services.py)"
     )

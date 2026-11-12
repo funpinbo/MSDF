@@ -169,6 +169,11 @@ const selectedInfo = computed(() => {
       </div>
     </div>
     <div v-if="error" class="error-box">엔진에서 데이터를 받지 못했습니다: {{ error }}</div>
+    <div v-else-if="data && !liveServices" class="hint-box">
+      <b>엔진에 붙은 서비스가 없습니다.</b> 서비스 코드에서 <code>start()</code>를 호출해야 이 엔진에 붙고, 그 서비스가 만든 실행만 여기에 나타납니다.
+      예제로 보려면 <code>examples/chatbot</code> 폴더에서 <code>uv run python run_services.py</code>를 실행하세요.
+      (<code>run_local.py</code>는 자기 프로세스 안의 엔진으로 따로 돌기 때문에 여기에 나타나지 않습니다.)
+    </div>
 
     <div class="kpis">
       <KpiCard label="실행" :value="num(t.runs)" :sub="`진행 중 ${num(t.runs_running)}`" />
@@ -293,6 +298,7 @@ const selectedInfo = computed(() => {
 <style scoped>
 .map-page { padding: 16px 18px 24px; display: grid; gap: 14px; }
 .bar h2 { font-size: 17px; }
+.hint-box { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 8px; padding: 10px 14px; line-height: 1.6; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; border-radius: 0; background: var(--panel); padding: 5px 11px; color: var(--muted); }
 .seg button.on { background: var(--accent); color: #fff; }

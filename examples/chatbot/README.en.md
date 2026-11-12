@@ -23,8 +23,18 @@ uv run python run_local.py "환불은 언제 되나요" "환불은 언제 되나
 ```
 
 The second question ("When will I get a refund?" again) is the same request, so no step runs and the answer comes from the cache.
+This demo runs its own engine inside its process, so **it does not show up in the web UI of `msdf up`.**
 
-## As separate processes
+## Watch it in the web UI (two commands)
+
+```bash
+uv run msdf up                      # terminal 1 — engine. http://127.0.0.1:8787/ui
+uv run python run_services.py       # terminal 2 — attaches the four services and sends a sample question every 3 seconds
+```
+
+Runs appear right away on the live map and in the logs. Ctrl+C stops all services. Change the interval with e.g. `ASK_EVERY=1`.
+
+## Each service as its own process
 
 ```bash
 uv run msdf up                  # terminal 1 — engine. See the flow at http://127.0.0.1:8787/ui
@@ -46,3 +56,5 @@ The web UI appears only after it is built once at the repository root: `cd front
 | `iam.yaml` | permissions per account level |
 | `resolvers.yaml` | search results in SQLite, everything else in files |
 | `sample_docs.json` | sample documents |
+| `run_local.py` | single-process demo (its own engine, no UI) |
+| `run_services.py` | attaches the four services to a running engine and keeps sending questions (for the UI) |
