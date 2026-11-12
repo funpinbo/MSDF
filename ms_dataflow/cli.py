@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -65,6 +66,8 @@ def cmd_up(args: argparse.Namespace) -> int:
         keep_versions=args.keep_versions,
     )
     db = args.db or str(Path(args.config or args.root) / ".msdf" / "msdf.db")
+    if args.ui_dist:
+        os.environ["MSDF_UI_DIST"] = str(Path(args.ui_dist).resolve())
     try:
         app = build_app(project, db, settings, ui=not args.no_ui)
     except LoadError as e:
@@ -72,6 +75,13 @@ def cmd_up(args: argparse.Namespace) -> int:
         return 1
     print(f"MSDF {__version__}: {_summary(project)}")
     print(f"엔진: http://{args.host}:{args.port}  (UI: http://{args.host}:{args.port}/ui)")
+    if not args.no_ui:
+        from ms_dataflow.ui import dist_dir
+
+        if not (dist_dir() / "index.html").exists():
+            print(f"UI 빌드 없음 ({dist_dir()}): /ui에서 빌드 방법을 안내합니다.")
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        print("주의: 엔진 API에는 인증이 없습니다. 믿을 수 있는 네트워크에서만 여세요.")
     print(f"DB: {db}")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -115,6 +125,11 @@ def main(argv: list[str] | None = None) -> int:
     up.add_argument("--keep-generations", type=int, default=3, help="hot에 둘 generation 수 (N)")
     up.add_argument("--keep-versions", type=int, default=3, help="hot에 둘 version 복제본 수 (M)")
     up.add_argument("--no-ui", action="store_true", help="웹 UI를 띄우지 않는다")
+    up.add_argument(
+        "--ui-dist",
+        default=None,
+        help="빌드한 웹 UI 폴더 (기본: 패키지 안 ms_dataflow/ui/dist, 환경 변수 MSDF_UI_DIST)",
+    )
     up.set_defaults(func=cmd_up)
 
     check = sub.add_parser("check", help="설정과 코드를 검증만 한다")

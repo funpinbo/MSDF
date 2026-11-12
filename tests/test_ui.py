@@ -165,7 +165,17 @@ def test_new_rename_and_delete(sched, calc):
         assert not mismatch["ok"]
 
 
+def test_ui_dist_override(sched, tmp_path, monkeypatch):
+    dist = tmp_path / "elsewhere"
+    dist.mkdir()
+    (dist / "index.html").write_text("<p>override</p>")
+    monkeypatch.setenv("MSDF_UI_DIST", str(dist))
+    with TestClient(sched.app()) as c:
+        assert c.get("/ui/").text == "<p>override</p>"
+
+
 def test_ui_not_built_page(sched, tmp_path, monkeypatch):
+    monkeypatch.delenv("MSDF_UI_DIST", raising=False)
     monkeypatch.setattr(ui, "DIST", tmp_path / "none")
     with TestClient(sched.app()) as c:
         r = c.get("/ui/")
@@ -177,6 +187,7 @@ def test_ui_serves_build(sched, tmp_path, monkeypatch):
     (dist / "assets").mkdir(parents=True)
     (dist / "index.html").write_text("<div id=app></div>")
     (dist / "assets" / "app.js").write_text("console.log(1)")
+    monkeypatch.delenv("MSDF_UI_DIST", raising=False)
     monkeypatch.setattr(ui, "DIST", dist)
     with TestClient(sched.app()) as c:
         assert c.get("/ui/").text == "<div id=app></div>"

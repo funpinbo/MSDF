@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -24,6 +25,13 @@ if TYPE_CHECKING:
 
 DIST = Path(__file__).parent / "dist"
 
+
+def dist_dir() -> Path:
+    """UI 빌드 폴더. MSDF_UI_DIST(또는 msdf up --ui-dist)가 있으면 그것을 쓴다."""
+    override = os.environ.get("MSDF_UI_DIST")
+    return Path(override).expanduser().resolve() if override else DIST
+
+
 _NOT_BUILT = """<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <title>MSDF UI 빌드 필요</title><style>body{font:15px/1.6 system-ui,sans-serif;max-width:640px;
 margin:60px auto;padding:0 16px}code,pre{background:#f2f2ef;padding:2px 6px;border-radius:4px}
@@ -31,7 +39,9 @@ pre{padding:12px}</style></head><body><h1>웹 UI가 아직 빌드되지 않았�
 <p>MSDF는 UI 소스만 배포합니다. 저장소 루트에서 한 번 빌드하면 이 주소에서 열립니다.</p>
 <pre>cd frontend
 npm install
-npm run build</pre><p>엔진은 정상 동작 중입니다. JSON API는 <code>/api/overview</code>,
+npm run build</pre><p>저장소 밖에서 설치했다면(git 주소로 pip install) 빌드한 폴더를 알려 주세요:
+<code>msdf up --ui-dist 경로/ms_dataflow/ui/dist</code></p>
+<p>엔진은 정상 동작 중입니다. JSON API는 <code>/api/overview</code>,
 <code>/api/runs</code> 등에서 볼 수 있습니다.</p></body></html>"""
 
 
@@ -141,11 +151,12 @@ def install(sched: Scheduler) -> None:
 
         @app.get("/ui/{path:path}", include_in_schema=False, response_model=None)
         async def ui(path: str) -> FileResponse | HTMLResponse:
-            index = DIST / "index.html"
+            dist = dist_dir()
+            index = dist / "index.html"
             if not index.exists():
                 return HTMLResponse(_NOT_BUILT)
-            target = (DIST / path).resolve()
-            if path and target.is_file() and DIST.resolve() in target.parents:
+            target = (dist / path).resolve()
+            if path and target.is_file() and dist.resolve() in target.parents:
                 return FileResponse(target)
             return FileResponse(index)  # 해시 라우팅이라 나머지는 index.html
 
