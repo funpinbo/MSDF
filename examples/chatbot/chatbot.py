@@ -32,7 +32,13 @@ def on_search_failed(status: str):  # "failed" | "cancelled"
 
 
 if __name__ == "__main__":
+    import time
+
     start()
     print("질문을 입력하세요 (빈 줄이면 종료)")
-    while q := input("> ").strip():
-        chatbot(q)
+    try:
+        while q := input("> ").strip():
+            chatbot(q)
+    except (EOFError, KeyboardInterrupt):
+        pass
+    time.sleep(2)  # 아직 오지 않은 답을 잠깐 기다린다

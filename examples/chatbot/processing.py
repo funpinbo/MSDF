@@ -23,5 +23,4 @@ def refine(vectors: list) -> tuple[str, list]:  # 반환 순서 = outputs 순서
 
 
 if __name__ == "__main__":
-    start()
-    input("processing 서비스 실행 중. 끝내려면 Enter\n")
+    start(block=True)  # Ctrl+C로 종료할 때까지 Action을 처리한다

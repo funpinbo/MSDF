@@ -127,8 +127,15 @@ except OrderError:
 
 ```python
 if __name__ == "__main__":
-    start()      # 엔진에 붙는다
-    app.run()    # 내 서비스는 평소대로
+    start()      # 엔진에 붙는다 (바로 반환)
+    app.run()    # 내 서비스는 평소대로 (웹 서버 등)
+```
+
+자기 메인 루프가 없는 서비스(Action만 제공)는 프로세스가 끝나지 않게 `block=True`를 줍니다.
+
+```python
+if __name__ == "__main__":
+    start(block=True)   # Ctrl+C나 SIGTERM을 받으면 등록을 해제하고 끝난다
 ```
 
 - 부른 파일에서 import로 닿는 서비스와 Action을 엔진에 등록하고, 단계 실행 요청을 받을 작은 서버를 백그라운드로 띄운 뒤 **바로 반환**합니다.
@@ -146,6 +153,7 @@ if __name__ == "__main__":
 | `host` | `127.0.0.1` | 수신 서버 주소 |
 | `root` | 부른 파일의 폴더 | 코드 분석을 시작할 프로젝트 폴더 |
 | `timeout` | 없음 | 엔진을 기다릴 최대 시간(초) |
+| `block` | `False` | `True`면 반환하지 않고 Ctrl+C나 SIGTERM까지 기다린다. Action만 제공하는 서비스용 |
 
 ## `@context`
 

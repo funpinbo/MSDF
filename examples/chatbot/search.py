@@ -27,5 +27,4 @@ def fetch(q: str) -> list:
 
 
 if __name__ == "__main__":
-    start()
-    input("search 서비스 실행 중. 끝내려면 Enter\n")
+    start(block=True)  # Ctrl+C로 종료할 때까지 Action을 처리한다

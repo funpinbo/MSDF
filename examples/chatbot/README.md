@@ -9,10 +9,12 @@ chatbot ──order("search_result", q)──▶ 엔진
 search.fetch(q) ─▶ embedding.embed ─▶ processing.refine ─▶ chatbot.on_search_result
 ```
 
+저장소 루트에서 `uv sync --all-extras`를 한 뒤 이 폴더에서 실행합니다. pip로 설치했다면 가상 환경을 켜고 `uv run`을 빼세요.
+
 ## 한 프로세스로 빠르게 보기
 
 ```bash
-python run_local.py "환불은 언제 되나요" "환불은 언제 되나요"
+uv run python run_local.py "환불은 언제 되나요" "환불은 언제 되나요"
 ```
 
 두 번째 질문은 같은 요청이므로 단계를 하나도 실행하지 않고 캐시에서 답합니다.
@@ -20,12 +22,14 @@ python run_local.py "환불은 언제 되나요" "환불은 언제 되나요"
 ## 여러 프로세스로 실행
 
 ```bash
-msdf up                  # 터미널 1 — 엔진. http://127.0.0.1:8787/ui 에서 흐름을 볼 수 있다
-python search.py         # 터미널 2
-python embedding.py      # 터미널 3
-python processing.py     # 터미널 4
-python chatbot.py        # 터미널 5 — 질문을 입력한다
+uv run msdf up                  # 터미널 1 — 엔진. http://127.0.0.1:8787/ui 에서 흐름을 볼 수 있다
+uv run python search.py         # 터미널 2
+uv run python embedding.py      # 터미널 3
+uv run python processing.py     # 터미널 4
+uv run python chatbot.py        # 터미널 5 — 질문을 입력한다 (빈 줄이면 종료)
 ```
+
+웹 UI는 저장소 루트에서 한 번 빌드해야 보입니다: `cd frontend && npm install && npm run build`.
 
 ## 파일
 

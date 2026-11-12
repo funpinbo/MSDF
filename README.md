@@ -7,7 +7,19 @@ MSA 환경에서 **서비스끼리 서로를 몰라도 데이터를 주고받게
 흐름의 기준이 task가 아니라 **데이터(Artifact)** 라는 점이 Airflow 같은 task 중심 도구와 다릅니다.
 서비스는 "결과물 이름"만 요청하고, 그 뒤에 어떤 서비스가 어떤 순서로 붙는지는 DAG가 정합니다.
 
-> 현재 버전 **0.1.0**: 한 머신에서 엔진과 여러 서비스 프로세스로 동작합니다. 남은 일은 [로드맵](docs/roadmap.md)에 있습니다.
+> 현재 버전 **0.1.0**: 한 머신에서 엔진과 여러 서비스 프로세스로 동작합니다. 아직 PyPI에는 없으며 [저장소나 git 주소로 설치](docs/installation.md)합니다.
+> 남은 일은 [로드맵](docs/roadmap.md)에 있습니다.
+
+## 빠르게 돌려 보기
+
+```bash
+git clone https://github.com/funpinbo/MSDF.git && cd MSDF
+uv sync --all-extras
+cd examples/chatbot
+uv run python run_local.py "환불은 언제 되나요" "환불은 언제 되나요"
+```
+
+두 번째 질문은 같은 요청이라 단계를 하나도 실행하지 않고 캐시에서 답합니다. 엔진과 웹 UI까지 띄워 보려면 [시작하기](docs/getting-started.md)를 보세요.
 
 ## 어떻게 쓰나
 
@@ -26,7 +38,7 @@ def on_stats(stats): ...                         # DAG의 on_success가 가리�
 def on_stats_failed(status: str): ...            # DAG의 on_fail이 가리킨다
 
 if __name__ == "__main__":
-    start()        # 엔진에 붙는다 (논블로킹)
+    start()        # 엔진에 붙는다 (바로 반환)
     app("2026-11-12")
 ```
 
@@ -42,6 +54,9 @@ def clean(rows): return [r for r in rows if r["value"] is not None]
 
 @action(inputs=["rows"], outputs=["stats"])
 def summarize(rows): return {"count": len(rows), "total": sum(r["value"] for r in rows)}
+
+if __name__ == "__main__":
+    start(block=True)   # Action만 제공하는 서비스는 Ctrl+C까지 기다린다
 ```
 
 ```yaml
@@ -107,7 +122,8 @@ python app.py
 
 | 문서 | 내용 |
 | --- | --- |
-| [시작하기](docs/getting-started.md) | 설치부터 첫 흐름을 돌리기까지 |
+| [설치](docs/installation.md) | PyPI 없이 설치하는 세 가지 방법 (저장소, git 주소, 휠) |
+| [시작하기](docs/getting-started.md) | 예제를 5분 만에 돌리고, 내 프로젝트에 붙이기 |
 | [핵심 개념](docs/concepts.md) | Service, Action, Order, DAG, Artifact와 캐시·실패 처리 |
 | [서비스 작성하기](docs/writing-services.md) | `service`, `action`, `order`, `start`, `context`, `delete` 사용법 |
 | [설정 파일](docs/configuration.md) | DAG, IAM, resolvers YAML 문법, 로딩 검증, `msdf` 명령 |
@@ -118,19 +134,30 @@ python app.py
 
 ## 설치
 
+**아직 PyPI에 올리지 않았습니다.** 엔진을 띄우는 곳은 저장소를 받아 설치하고, 다른 저장소의 서비스는 git 주소로 설치합니다.
+
 ```bash
-pip install msdf                # 코어 (데코레이터, 모델, msdf check)
-pip install 'msdf[runtime]'     # start()로 엔진에 붙는 서비스
-pip install 'msdf[server]'      # msdf up (Scheduler + UI)
-pip install 'msdf[dataframe]'   # DataFrame을 Parquet으로 저장
+# 엔진을 띄우는 곳 (웹 UI 포함)
+git clone https://github.com/funpinbo/MSDF.git && cd MSDF
+uv sync --all-extras                     # pip라면: pip install -e ".[server]"
+
+# 다른 저장소의 서비스
+pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git"
 ```
 
-패키지 이름은 `msdf`, import 이름은 항상 `ms_dataflow`입니다.
+| 묶음 | 용도 |
+| --- | --- |
+| (없음) | 데코레이터, 모델, `msdf check` |
+| `runtime` | `start()`로 엔진에 붙는 서비스 |
+| `server` | `msdf up` (Scheduler + 웹 UI) |
+| `dataframe` | DataFrame을 Parquet으로 저장 |
+
+파이썬 3.11 이상. 패키지 이름은 `msdf`, import 이름은 항상 `ms_dataflow`입니다. 버전 고정, 휠 파일 만들기는 [설치](docs/installation.md)를 보세요.
 
 ## 웹 UI 빌드
 
 `msdf up`은 `http://127.0.0.1:8787/ui`에 웹 UI를 띄웁니다. **UI는 소스만 저장소에 있고 빌드 결과는 없습니다.**
-저장소를 받은 뒤 한 번 빌드하세요 (Node.js 20 이상).
+저장소를 받은 뒤 한 번 빌드하세요 (Node.js 20.19 이상, 22 권장).
 
 ```bash
 cd frontend
@@ -138,7 +165,8 @@ npm install
 npm run build        # 결과: ms_dataflow/ui/dist
 ```
 
-빌드하지 않아도 엔진과 API는 그대로 동작하며, `/ui`가 위 명령을 안내합니다. 화면 구성은 [frontend/README.md](frontend/README.md)를 보세요.
+빌드하지 않아도 엔진과 API는 그대로 동작하며, `/ui`가 위 명령을 안내합니다. git 주소로 설치한 곳에서는 빌드한 폴더를 `msdf up --ui-dist 경로`로 알려 줍니다.
+화면 구성은 [frontend/README.md](frontend/README.md)를 보세요.
 
 | 페이지 | 하는 일 |
 | --- | --- |
@@ -154,6 +182,13 @@ uv run pytest
 uv run ruff check .
 uv run mypy ms_dataflow
 ```
+
+기여 방법은 [CONTRIBUTING.md](CONTRIBUTING.md)에 있습니다.
+
+## 보안
+
+엔진 API(`/api`, `/order` 등)와 웹 UI에는 **인증이 없습니다.** 기본으로 `127.0.0.1`에만 열리며, 다른 주소(`--host 0.0.0.0`)로 열 때는
+믿을 수 있는 네트워크 안에서만 쓰세요. 웹 UI의 DAG 편집기는 엔진 머신의 `dags/` 파일을 고칠 수 있습니다.
 
 ## 라이선스
 

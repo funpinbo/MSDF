@@ -7,6 +7,7 @@ import contextlib
 import inspect
 import logging
 import os
+import signal
 import socket
 import threading
 import time
@@ -240,13 +241,18 @@ def start(
     host: str = "127.0.0.1",
     root: str | None = None,
     timeout: float | None = None,
+    block: bool = False,
 ) -> None:
     """이 프로세스를 엔진에 붙인다. 등록이 끝나면 바로 반환한다(논블로킹).
 
     - scheduler: 엔진 주소. 기본은 환경 변수 MSDF_SCHEDULER 또는 http://127.0.0.1:8787
     - required=False면 엔진이 없을 때 경고만 내고, 백그라운드에서 계속 연결을 시도한다.
+    - block=True면 반환하지 않고 Ctrl+C(SIGINT)나 SIGTERM을 받을 때까지 기다린다.
+      자기 메인 루프가 없는 서비스(Action만 제공하는 서비스)에 쓴다.
     """
     if _CLIENT:
+        if block:
+            _wait_forever()
         return
     scheduler = scheduler or os.environ.get("MSDF_SCHEDULER", DEFAULT_SCHEDULER)
     entry = _caller_file()
@@ -285,6 +291,21 @@ def start(
     set_backend(client)
     _CLIENT.append(client)
     atexit.register(stop)
+    if block:
+        _wait_forever()
+
+
+def _wait_forever() -> None:
+    done = threading.Event()
+    with contextlib.suppress(ValueError):  # 메인 스레드가 아니면 시그널을 걸 수 없다
+        signal.signal(signal.SIGTERM, lambda *_: done.set())
+    log.warning("MSDF: 서비스 실행 중 (Ctrl+C로 종료)")
+    try:
+        while not done.wait(1.0):
+            pass
+    except KeyboardInterrupt:
+        pass
+    stop()
 
 
 def stop() -> None:

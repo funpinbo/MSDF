@@ -156,7 +156,7 @@ ID는 `ms_dataflow.ids.artifact_id`로 만들어야 엔진이 미리 계산한 I
 msdf check [--root .] [--config DIR] [--allow-external]
 msdf up    [--root .] [--config DIR] [--allow-external]
            [--host 127.0.0.1] [--port 8787] [--db PATH]
-           [--lease-ttl 60] [--keep-generations 3] [--keep-versions 3] [--no-ui]
+           [--lease-ttl 60] [--keep-generations 3] [--keep-versions 3] [--no-ui] [--ui-dist DIR]
 ```
 
 | 옵션 | 기본 | 뜻 |
@@ -169,3 +169,8 @@ msdf up    [--root .] [--config DIR] [--allow-external]
 | `--keep-generations` | 3 | 같은 요청의 최신 몇 세대를 캐시(hot)에 둘지 |
 | `--keep-versions` | 3 | 같은 자리에서 버전만 다른 결과를 몇 개 hot에 둘지 |
 | `--no-ui` | 꺼짐 | 웹 UI를 띄우지 않음 |
+| `--ui-dist` | 패키지 안 `ui/dist` | 빌드한 웹 UI 폴더. 환경 변수 `MSDF_UI_DIST`로도 지정 |
+
+서비스 쪽 환경 변수: `MSDF_SCHEDULER`(엔진 주소, 기본 `http://127.0.0.1:8787`).
+
+> 엔진 API와 웹 UI에는 인증이 없습니다. `--host`를 `127.0.0.1`이 아닌 곳으로 열면 경고를 냅니다. 믿을 수 있는 네트워크에서만 여세요.

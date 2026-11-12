@@ -10,7 +10,13 @@ npm install
 npm run build        # → ../ms_dataflow/ui/dist
 ```
 
-빌드하지 않고 `msdf up`을 띄우면 `/ui`가 이 빌드 방법을 안내합니다. 엔진과 JSON API는 빌드와 상관없이 동작합니다.
+Node.js 20.19 이상(22 권장)이 필요합니다. 빌드하지 않고 `msdf up`을 띄우면 `/ui`가 이 빌드 방법을 안내합니다. 엔진과 JSON API는 빌드와 상관없이 동작합니다.
+
+MSDF를 git 주소로 설치한 곳에서는 패키지 안에 빌드 결과가 없으므로, 빌드한 폴더를 알려 줍니다.
+
+```bash
+msdf up --ui-dist /경로/MSDF/ms_dataflow/ui/dist   # 또는 MSDF_UI_DIST 환경 변수
+```
 
 ## 개발
 
