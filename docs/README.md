@@ -10,6 +10,7 @@ MSDF(Micro Service Data Flow)는 마이크로서비스끼리 **서로를 몰라�
 
 | 순서 | 문서 | 이런 사람에게 |
 | --- | --- | --- |
+| – | [만든 이유](background.md) | 왜 이런 구조가 필요한지 먼저 알고 싶은 사람 |
 | 0 | [설치](installation.md) | PyPI 없이 설치하기: 저장소, git 주소, 휠 파일 |
 | 1 | [시작하기](getting-started.md) | 예제를 5분 만에 돌리고, 내 프로젝트에 붙이기 |
 | 2 | [핵심 개념](concepts.md) | Service, Action, Order, DAG, Artifact가 무엇인지 알고 싶은 사람 |
