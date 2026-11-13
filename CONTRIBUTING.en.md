@@ -73,7 +73,7 @@ Principles the guards check:
 
 | Area | Principles |
 | --- | --- |
-| Philosophy | Eight public functions (`service`, `action`, `order`, `start`, `context`, `delete`, `invalidate`, `cancel`). Service code does not import engine internals, and services do not import each other. No scheduler, deployment or LLM-framework dependencies. `meta` never enters the cache key |
+| Philosophy | Eight public functions (`service`, `action`, `order`, `start`, `context`, `delete`, `invalidate`, `cancel`). Service code does not import engine internals, and services do not import each other. Responses and deliveries the engine gives a service never contain another service's name, exception text or DAG path. No scheduler, deployment or LLM-framework dependencies. `meta` never enters the cache key |
 | Architecture | Core modules (decorators, registry, config, Planner) work without the server. The Planner is a pure function. Only the engine writes the metadata DB. Hashes live only in `ids.py`. Library code does not `print`. New fields in engine↔service messages have defaults |
 | Compatibility | Cache keys and Action versions are the same for the same input, regardless of MSDF version or Python version. Changing `schema.sql` comes with a `SCHEMA_VERSION` bump and a migration. The version number agrees in three places, and CHANGELOG (ko/en) has an entry for it |
 | Docs | Korean and English docs exist in pairs with the same number of headings, code blocks and tables. Every public function and `msdf` command is documented. Relative links are not broken. Python examples are valid syntax |

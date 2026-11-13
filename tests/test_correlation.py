@@ -75,7 +75,9 @@ def test_on_fail_gets_meta_and_error(corr, monkeypatch):
         r.run_until_idle()
     fails = [v for e, v in read_log(corr) if e == "on_fail"]
     assert fails[0]["status"] == "failed" and fails[0]["meta"] == {"session": "C"}
-    assert "실패 주입" in fails[0]["error"]
+    # 사유는 엔진이 정한 문장뿐이다. mid 서비스의 예외 문구는 넘어오지 않는다
+    assert fails[0]["error"] == "결과를 만드는 중 실패했습니다"
+    assert "실패 주입" not in fails[0]["error"] and "mid" not in fails[0]["error"]
 
 
 def test_idempotency_key_returns_the_first_request(corr):

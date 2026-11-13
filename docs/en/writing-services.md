@@ -147,7 +147,7 @@ def on_stats_failed(status: str, meta: dict, error: str | None):
 | `status` (first argument) | – | ○ | `"failed"` or `"cancelled"` |
 | `request_id` | ○ | ○ | the value `order()` returned |
 | `meta` | ○ | ○ | the `meta` given to `order()` (`{}` if none) |
-| `error` | – | ○ | last line of the failure cause (`None` if none) |
+| `error` | – | ○ | a fixed reason sentence chosen by the engine (below). Never another service's exception text |
 | `refresh` | ○ | ○ | subscriptions: `0` is the first delivery; `1`, `2`, … are re-deliveries after a source changed |
 
 Arguments you do not declare are not passed, so existing delivery Actions keep working. Computing (produce) Actions never receive `meta`:
@@ -159,9 +159,9 @@ a value outside the cache key must not change a result.
 
 | Exception | When |
 | --- | --- |
-| `PermissionDenied` | Blocked by an IAM rule. `.blocked` lists the blocked connections |
+| `PermissionDenied` | Blocked by an IAM rule. `.blocked` holds only this service's own order rule (paths between other services are not revealed) |
 | `UnknownOrder` | No DAG with that name, or this service is not in the DAG's deliveries |
-| `ServiceUnavailable` | A service on the DAG's path is not running. `.missing` lists them |
+| `ServiceUnavailable` | A service needed to produce this result is not connected (which one is not revealed) |
 | `ParamError` | params names are missing or extra |
 | `OrderError` | anything else (cannot reach the engine, …) |
 
@@ -175,6 +175,25 @@ except PermissionDenied as e:
 except OrderError as e:
     print("order failed:", e)
 ```
+
+### What a service cannot see
+
+Services do not know each other. So the responses and deliveries the engine gives a service **never contain another service's name, Actions,
+exception text or DAG path.** Who failed and why, which service is down, which connection was blocked by permissions: operators see those in the
+web UI and the engine log.
+
+The `error` passed to `on_fail` is one of these five sentences (shown in Korean, as the engine emits them):
+
+| When | `error` |
+| --- | --- |
+| this request's computation failed | 결과를 만드는 중 실패했습니다 |
+| a computation shared with another request failed | 함께 기다리던 계산이 실패했습니다 |
+| input data disappeared and could not be found even after re-planning | 입력 데이터를 찾지 못했습니다 |
+| the request was cancelled (`cancel()`, UI, `msdf cancel`) | 요청이 취소되었습니다 |
+| permission was lost while subscribed | 권한이 없어 구독을 끝냈습니다 |
+
+For the same reason a service's `invalidate()` does not tell who depends on the data (not even how many subscriptions), and `cancel()` does not tell
+which steps were shared with other requests. A CI guard (`tests/guards/test_isolation.py`) checks this principle.
 
 ## `start()`
 

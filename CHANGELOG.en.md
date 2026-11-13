@@ -18,6 +18,8 @@
 
 ### Changed
 
+- `on_fail`'s `error` now receives only **fixed reason sentences chosen by the engine** (five of them). Another service's exception text no longer passes through (0.3 passed its last line).
+- Services cannot see other services: a rejected `order()`'s `PermissionDenied.blocked` holds only the service's own order rule, and `ServiceUnavailable` names no services. A service's `invalidate()` returns only the new version, and `cancel()` only whether it succeeded. Details are in the engine log and the web UI. A CI guard (`test_isolation.py`) checks this.
 - DB schema v5 (`subscription` table, `run.subscription_id`, `run.refresh_no`). Migrated automatically at startup, with a backup.
 - Engine↔service messages gained `OrderRequest.subscribe`, `StepTask.refresh` and `CancelRequest` (all with defaults, so 0.3 services still connect).
 

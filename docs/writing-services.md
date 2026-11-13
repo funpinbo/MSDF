@@ -144,7 +144,7 @@ def on_stats_failed(status: str, meta: dict, error: str | None):
 | `status` (첫 인자) | – | ○ | `"failed"` 또는 `"cancelled"` |
 | `request_id` | ○ | ○ | `order()`가 돌려준 값 |
 | `meta` | ○ | ○ | `order()`에 준 `meta` (없으면 `{}`) |
-| `error` | – | ○ | 실패 원인의 마지막 줄 (없으면 `None`) |
+| `error` | – | ○ | 엔진이 정한 사유 문장 (아래). 다른 서비스의 예외 문구는 오지 않음 |
 | `refresh` | ○ | ○ | 구독: `0`은 처음 배달, `1`, `2`, …는 source가 바뀌어 다시 배달한 것 |
 
 선언하지 않은 인자는 넣지 않으므로 기존 delivery Action은 그대로 동작합니다. 계산하는 Action(produce)은 `meta`를 받지 않습니다. cache key에 없는 값이 결과를 바꾸면 cache가 틀어지기 때문입니다.
@@ -155,9 +155,9 @@ def on_stats_failed(status: str, meta: dict, error: str | None):
 
 | 예외 | 언제 |
 | --- | --- |
-| `PermissionDenied` | IAM 규칙에 막힘. `.blocked`에 막힌 연결 목록 |
+| `PermissionDenied` | IAM 규칙에 막힘. `.blocked`에는 이 서비스 자신의 order 규칙만 (다른 서비스 사이의 경로는 알리지 않음) |
 | `UnknownOrder` | 그런 이름의 DAG가 없거나, DAG의 deliveries에 이 서비스가 없음 |
-| `ServiceUnavailable` | DAG가 거치는 서비스가 떠 있지 않음. `.missing`에 목록 |
+| `ServiceUnavailable` | 이 결과를 만드는 데 필요한 서비스가 연결되어 있지 않음 (어느 서비스인지는 알리지 않음) |
 | `ParamError` | params 이름이 빠졌거나 남음 |
 | `OrderError` | 그 밖 (엔진에 연결할 수 없음 등) |
 
@@ -171,6 +171,24 @@ except PermissionDenied as e:
 except OrderError as e:
     print("요청 실패:", e)
 ```
+
+### 서비스가 알 수 없는 것
+
+서비스는 서로를 모릅니다. 그래서 엔진이 서비스에 돌려주는 응답과 배달에는 **다른 서비스의 이름, Action, 예외 문구, DAG 경로가 들어가지 않습니다.**
+누가 무엇 때문에 실패했는지, 어느 서비스가 꺼져 있는지, 어느 연결이 권한에 막혔는지는 운영자가 웹 UI와 엔진 로그에서 봅니다.
+
+`on_fail`의 `error`로 오는 사유는 아래 다섯 문장뿐입니다.
+
+| 언제 | `error` |
+| --- | --- |
+| 이 요청의 계산이 실패함 | 결과를 만드는 중 실패했습니다 |
+| 다른 요청과 함께 기다리던 계산이 실패함 | 함께 기다리던 계산이 실패했습니다 |
+| 입력 데이터가 사라져 다시 계획해도 찾지 못함 | 입력 데이터를 찾지 못했습니다 |
+| 요청이 취소됨 (`cancel()`, UI, `msdf cancel`) | 요청이 취소되었습니다 |
+| 구독 중 권한이 없어짐 | 권한이 없어 구독을 끝냈습니다 |
+
+같은 이유로 서비스의 `invalidate()`는 누가 그 데이터에 기대는지(구독 수 포함) 알려 주지 않고, `cancel()`은 다른 요청과 공유하던 단계를 알려 주지 않습니다.
+이 원칙은 CI의 guard(`tests/guards/test_isolation.py`)가 확인합니다.
 
 ## `start()`
 

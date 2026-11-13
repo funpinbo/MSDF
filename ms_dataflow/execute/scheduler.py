@@ -314,11 +314,25 @@ class Scheduler:
 
         @app.exception_handler(OrderError)
         async def order_error(_: Any, exc: OrderError) -> JSONResponse:
+            # 서비스는 서로를 모른다: 다른 서비스의 이름이나 DAG 경로를 요청 서비스에 보내지 않는다.
+            # 상세는 엔진 로그(UI의 엔진 로그 탭)에 남긴다.
             body: dict[str, Any] = {"code": exc.code, "message": str(exc)}
             if isinstance(exc, PermissionDenied):
-                body["blocked"] = exc.blocked
+                log.warning("order 거부 (IAM): %s", ", ".join(exc.blocked))
+                own = [b for b in exc.blocked if b.startswith("order:")]
+                body["blocked"] = own
+                body["message"] = (
+                    "권한이 없어 이 결과를 요청할 수 없습니다."
+                    if own
+                    else "권한 규칙에 막혀 이 결과를 만들 수 없습니다."
+                ) + " 자세한 내용은 엔진 로그와 웹 UI에서 봅니다."
             if isinstance(exc, ServiceUnavailable):
-                body["missing"] = exc.missing
+                log.warning("order 거부 (서비스 없음): %s", ", ".join(exc.missing))
+                body["missing"] = []
+                body["message"] = (
+                    "이 결과를 만드는 데 필요한 서비스가 아직 연결되지 않았습니다. "
+                    "자세한 내용은 엔진 로그와 웹 UI에서 봅니다."
+                )
             return JSONResponse(body, status_code=400)
 
         @app.post("/register")
@@ -425,7 +439,8 @@ class Scheduler:
                 ) from None
             log.info("cancel: %s by %s → %s", req.request_id, req.requester, out)
             sched.kick()
-            return out
+            # 다른 요청과 공유하던 단계 수 같은 정보는 돌려주지 않는다
+            return {"ok": out["ok"], "subscription_ended": out.get("subscription_ended", False)}
 
         @app.post("/invalidate")
         async def invalidate(req: InvalidateRequest) -> dict[str, Any]:
@@ -446,7 +461,8 @@ class Scheduler:
                 out["subscriptions"],
             )
             sched.kick()
-            return out
+            # 서비스는 누가 자기 데이터에 기대는지 모른다: 구독 수는 돌려주지 않는다
+            return {"version": out["version"]}
 
         # --- source 무효화 (운영자, webhook) ------------------------------------
         @app.post("/api/invalidate")

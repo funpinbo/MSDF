@@ -43,6 +43,16 @@ from ms_dataflow.store import Store
 
 _ACTIVE_SQL = "('" + "','".join(ACTIVE) + "')"
 
+# on_fail에 넘기는 사유. 엔진이 정한 문장만 쓴다: 다른 서비스의 이름, 예외 문구, DAG 구성은
+# 요청 서비스에 넘기지 않는다(서비스는 서로를 모른다). 상세는 엔진 로그와 UI(run.error)에만 남는다.
+FAIL_REASONS = {
+    "step_failed": "결과를 만드는 중 실패했습니다",
+    "upstream_failed": "함께 기다리던 계산이 실패했습니다",
+    "lost": "입력 데이터를 찾지 못했습니다",
+    "cancelled": "요청이 취소되었습니다",
+    "denied": "권한이 없어 구독을 끝냈습니다",
+}
+
 
 class Authorizer(Protocol):
     def check_order(self, order: Order, dag: Dag, delivery: Delivery) -> list[str]:
@@ -420,7 +430,7 @@ class Engine:
         extra: dict[str, Any] = {}
         if r["kind"] in ("deliver", "deliver_fail"):
             run = self.store.query(
-                "SELECT meta, error, subscription_id, refresh_no FROM run WHERE run_id = ?",
+                "SELECT meta, subscription_id, refresh_no FROM run WHERE run_id = ?",
                 (r["run_id"],),
             )
             # 구독의 refresh도 처음 요청의 request_id로 배달한다
@@ -429,9 +439,9 @@ class Engine:
             extra["refresh"] = run[0]["refresh_no"] if run else 0
             if run and run[0]["meta"]:
                 extra["meta"] = json.loads(run[0]["meta"])
-            if r["kind"] == "deliver_fail" and run and run[0]["error"]:
-                lines = str(run[0]["error"]).strip().splitlines()
-                extra["error"] = lines[-1][:500] if lines else None
+            if r["kind"] == "deliver_fail":
+                code = json.loads(r["params"] or "{}").get("reason")
+                extra["error"] = FAIL_REASONS.get(code, FAIL_REASONS["step_failed"])
         return StepTask(
             run_id=r["run_id"],
             step_no=r["step_no"],
@@ -440,7 +450,7 @@ class Engine:
             action=r["action"],
             generation=r["generation"],
             inputs=inputs,
-            params=json.loads(r["params"]),
+            params={} if r["kind"] != "produce" else json.loads(r["params"]),
             outputs=outputs,
             status=r["fail_status"],
             attempt=r["attempts"] + 1,
@@ -673,9 +683,13 @@ class Engine:
                     (error, now, row["run_id"]),
                 )
             for run_id, status in affected.items():
-                self._deliver_fail(db, run_id, status, error, now)
+                reason = "step_failed" if run_id == row["run_id"] else "upstream_failed"
+                self._deliver_fail(db, run_id, status, error, now, reason)
 
-    def _deliver_fail(self, db: Any, run_id: str, status: str, error: str, now: float) -> None:
+    def _deliver_fail(
+        self, db: Any, run_id: str, status: str, error: str, now: float, reason: str
+    ) -> None:
+        """실패 배달 단계를 넣는다. error는 UI용 상세, reason은 요청 서비스에 갈 FAIL_REASONS 키."""
         run = db.execute("SELECT * FROM run WHERE run_id = ?", (run_id,)).fetchone()
         if run is None or run["status"] != "running":
             return
@@ -693,15 +707,16 @@ class Engine:
             "SELECT coalesce(max(step_no), 0) + 1 FROM step WHERE run_id = ?", (run_id,)
         ).fetchone()
         db.execute(
-            """INSERT INTO step (run_id, step_no, kind, service, action, fail_status, status,
-               max_retries, retry_delay, queued_at)
-               VALUES (?, ?, 'deliver_fail', ?, ?, ?, 'queued', ?, ?, ?)""",
+            """INSERT INTO step (run_id, step_no, kind, service, action, fail_status, params,
+               status, max_retries, retry_delay, queued_at)
+               VALUES (?, ?, 'deliver_fail', ?, ?, ?, ?, 'queued', ?, ?, ?)""",
             (
                 run_id,
                 next_no,
                 svc,
                 act,
                 status,
+                _j({"reason": reason}),
                 spec.retries if spec else 0,
                 spec.retry_delay if spec else 0.0,
                 now,
@@ -732,7 +747,7 @@ class Engine:
                 dag = self.dags.get(run["order_name"])
                 delivery = delivery_for(dag, run["requester"]) if dag else None
                 if dag is None or delivery is None or run["replans"] >= self.settings.max_replans:
-                    self._deliver_fail(db, run_id, "failed", "입력 데이터 유실", now)
+                    self._deliver_fail(db, run_id, "failed", "입력 데이터 유실", now, "lost")
                     continue
                 order = Order(
                     name=run["order_name"],
@@ -931,7 +946,7 @@ class Engine:
                 ),
             )
             self._deliver_fail(
-                db, run_id, "cancelled", f"구독이 끝났습니다: {error.splitlines()[0]}", now
+                db, run_id, "cancelled", f"구독이 끝났습니다: {error.splitlines()[0]}", now, reason
             )
             db.execute("UPDATE run SET status = 'cancelled' WHERE run_id = ?", (run_id,))
 
@@ -1015,7 +1030,7 @@ class Engine:
                        lease_until = NULL WHERE run_id = ? AND step_no = ?""",
                     (reason, now, run_id, r["step_no"]),
                 )
-            self._deliver_fail(db, run_id, "cancelled", reason, now)
+            self._deliver_fail(db, run_id, "cancelled", reason, now, "cancelled")
             db.execute(
                 """UPDATE run SET status = 'cancelled', error = ?,
                    finished_at = CASE WHEN EXISTS (SELECT 1 FROM step WHERE run_id = ?

@@ -18,6 +18,8 @@
 
 ### 바뀐 것
 
+- `on_fail`의 `error`는 이제 **엔진이 정한 사유 문장**(다섯 가지)만 받습니다. 다른 서비스의 예외 문구는 넘어오지 않습니다(0.3에서는 마지막 줄이 넘어왔습니다).
+- 서비스는 다른 서비스를 알 수 없습니다: 거부된 `order()`의 `PermissionDenied.blocked`에는 자기 order 규칙만, `ServiceUnavailable`에는 서비스 이름이 없습니다. 서비스의 `invalidate()`는 새 version만, `cancel()`은 성공 여부만 돌려줍니다. 상세는 엔진 로그와 웹 UI에서 봅니다. CI guard(`test_isolation.py`)가 확인합니다.
 - DB 스키마 v5 (`subscription` 표, `run.subscription_id`, `run.refresh_no`). 시작할 때 자동 변환, 백업 남김.
 - 엔진↔서비스 메시지에 `OrderRequest.subscribe`, `StepTask.refresh`, `CancelRequest`가 추가되었습니다(모두 기본값이 있어 0.3 서비스도 붙습니다).
 

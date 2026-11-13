@@ -210,7 +210,8 @@ def test_permission_change_ends_the_subscription_and_says_why(sub, monkeypatch):
         assert s["status"] == "ended" and s["ended_reason"] == "denied"
     [fail] = delivered(sub, "on_fail")
     assert fail["status"] == "cancelled" and fail["meta"] == {"s": "A"}
-    assert "구독이 끝났습니다" in fail["error"] and rid
+    assert fail["error"] == "권한이 없어 구독을 끝냈습니다" and rid
+    assert "number" not in fail["error"] and "→" not in fail["error"]  # 막힌 경로를 알리지 않는다
 
 
 def test_service_can_cancel_only_its_own_requests(sub):
