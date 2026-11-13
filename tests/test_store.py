@@ -19,6 +19,10 @@ def _old_sql(version: int) -> str:
     for line in sql.splitlines(keepends=True):
         if version < 5 and line.lstrip().startswith(("subscription_id ", "refresh_no ")):
             continue
+        if version < 6 and line.lstrip().startswith("idle_since "):
+            continue
+        if version < 6 and line.lstrip().startswith("last_checksum "):
+            line = line.replace("TEXT,", "TEXT ", 1)
         if version < 3 and (
             line.lstrip().startswith(("meta ", "idempotency_key "))
             or "idx_run_idempotency" in line
@@ -49,7 +53,7 @@ def _make_v1(path):
     _make(path, 1)
 
 
-@pytest.mark.parametrize("version", [1, 2, 3, 4])
+@pytest.mark.parametrize("version", [1, 2, 3, 4, 5])
 def test_migrates_old_versions(tmp_path, version):
     db = tmp_path / "msdf.db"
     _make(db, version)

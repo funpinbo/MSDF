@@ -82,6 +82,9 @@ def summarize(rows) -> tuple[dict, list]:
     return stats, outliers
 ```
 
+- **If you write type hints, DAG connections are checked.** When the sender's return type and the receiver's argument type clearly differ (such as
+  `list` and `dict`), `msdf check` (and the DAG editor) stops it before anything runs. Only the hint text is compared, without running code, so hints
+  it cannot judge (your own classes, abstract types like `Any` or `Sequence`) and missing hints are not checked. What Python accepts, such as `int` → `float`, is allowed.
 - `async def` works too.
 
 ### Data that can be stored
@@ -265,7 +268,7 @@ def on_search_result(result: str, meta: dict, refresh: int):
 - **If the recomputed result is the same as last time, it is not delivered.** Users do not get the same answer twice.
 - However many changes arrive, one subscription has at most one refresh at a time, spaced by a minimum gap (`msdf up --refresh-min-gap`, default 1s). A change during a refresh triggers one more afterwards.
 - Every refresh is checked against IAM again. If permission was lost, the subscription ends and `on_fail` gets `status="cancelled"` with the reason (`error`).
-- It ends on: expiry, `cancel(request_id)`, lost permission, or a DAG change that makes the same request impossible. `subscribe=True` (no expiry) is allowed within `msdf up --max-subscriptions` (default 1000).
+- It ends on: expiry, `cancel(request_id)`, lost permission, a DAG change that makes the same request impossible, or the requesting service being disconnected for `--subscription-idle` (default 10 minutes; coming back before that keeps it). `subscribe=True` (no expiry) is allowed within `msdf up --max-subscriptions` (default 1000).
 - MSDF never checks sources itself. The only change signal is `invalidate()` from the service that reads the data.
 
 ## `cancel()`

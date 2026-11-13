@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS subscription (
   refresh_count   INTEGER NOT NULL DEFAULT 0,
   last_refresh_at REAL,
   last_delivered  TEXT,               -- 마지막으로 배달한 결과 artifact_id
-  last_checksum   TEXT                -- 그 결과의 checksum. 같으면 다시 배달하지 않는다
+  last_checksum   TEXT,               -- 그 결과의 checksum. 같으면 다시 배달하지 않는다
+  idle_since      REAL                -- 요청 서비스가 연결되어 있지 않게 된 시각 (돌아오면 NULL)
 );
 CREATE INDEX IF NOT EXISTS idx_subscription_status ON subscription(status);

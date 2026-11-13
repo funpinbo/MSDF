@@ -2,7 +2,7 @@
 
 [한국어](../roadmap.md) | **English**
 
-## Current status: 0.4.0
+## Current status: 0.5.0
 
 Runs on one machine as an engine (`msdf up`) plus several service processes.
 
@@ -27,6 +27,7 @@ Runs on one machine as an engine (`msdf up`) plus several service processes.
 | 17 | Data change step 1: `invalidate()`, `data_version`, `msdf invalidate` | done (0.3) |
 | 18 | Contribution CI: philosophy, architecture, compatibility and docs guards, e2e, install checks | done (0.3.1) |
 | 19 | Data change step 2: `subscribe`, `cancel(request_id)`, subscriptions page | done (0.4) |
+| 20 | Slot type check at load time, ending idle subscriptions | done (0.5) |
 
 ## Direction
 
@@ -47,8 +48,6 @@ With data change (`invalidate`, `subscribe`), the starting point — "react to d
 
 | Item | Contents |
 | --- | --- |
-| Slot type check | check at load time that the type hints of output and input slots connected by a DAG match |
-| Ending idle subscriptions | end a subscription when the requesting service has been gone for long (today it lasts until expiry) |
 | English messages and UI | CLI output, error messages and the web UI are in Korean today |
 | Reusing memory between consecutive steps in the same service | skip re-reading an output that was just saved, to cut interactive latency. Decide after measuring |
 | Large data and streaming | `ctx.load()`, `ctx.save()` for reading and writing storage directly inside an Action |

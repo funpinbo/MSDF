@@ -849,6 +849,7 @@ class Engine:
                    WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at <= ?""",
                 (now,),
             )
+            self._track_idle(db, now)
             # 끝난 refresh run은 놓아 준다 (한 구독에 refresh는 한 번에 하나)
             db.execute(
                 """UPDATE subscription SET active_run = NULL
@@ -865,6 +866,31 @@ class Engine:
             if run_id is not None:
                 started.append(run_id)
         return started
+
+    def _track_idle(self, db: Any, now: float) -> None:
+        """요청 서비스가 오래 연결되어 있지 않은 구독을 끝낸다.
+
+        연결 상태(available)를 아는 엔진(msdf up)에서만 한다. 돌아오면 시계를 되돌린다.
+        """
+        if self.available is None:
+            return
+        live = sorted(self.available)
+        marks = ",".join("?" * len(live)) or "''"
+        db.execute(
+            f"""UPDATE subscription SET idle_since = NULL
+                WHERE status = 'active' AND idle_since IS NOT NULL AND requester IN ({marks})""",
+            live,
+        )
+        db.execute(
+            f"""UPDATE subscription SET idle_since = ?
+                WHERE status = 'active' AND idle_since IS NULL AND requester NOT IN ({marks})""",
+            (now, *live),
+        )
+        db.execute(
+            """UPDATE subscription SET status = 'ended', ended_reason = 'requester_gone', dirty = 0
+               WHERE status = 'active' AND idle_since IS NOT NULL AND idle_since + ? <= ?""",
+            (self.settings.subscription_idle, now),
+        )
 
     def _refresh(self, sub: Any, now: float) -> str | None:
         order = Order(
@@ -1088,6 +1114,10 @@ class Engine:
         exp = self.store.query(
             "SELECT min(expires_at) AS t FROM subscription WHERE status = 'active'"
         )
-        times += [sub[0]["gap"], exp[0]["t"]]
+        idle = self.store.query(
+            "SELECT min(idle_since + ?) AS t FROM subscription WHERE status = 'active'",
+            (self.settings.subscription_idle,),
+        )
+        times += [sub[0]["gap"], exp[0]["t"], idle[0]["t"]]
         future = [float(t) for t in times if t is not None and t > now]
         return min(future) if future else None

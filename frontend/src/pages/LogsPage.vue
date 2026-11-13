@@ -182,7 +182,7 @@ function rate(s) {
             <td><span class="dot" :style="{ background: serviceColor(s.requester) }" />{{ s.requester }}</td>
             <td>
               <StatusBadge :status="s.status" />
-              <span v-if="s.status === 'ended'" class="faint"> {{ { expired: '만료', cancelled: '취소', denied: '권한 없음', dag_changed: 'DAG 바뀜' }[s.ended_reason] || s.ended_reason }}</span>
+              <span v-if="s.status === 'ended'" class="faint"> {{ { expired: '만료', cancelled: '취소', denied: '권한 없음', dag_changed: 'DAG 바뀜', requester_gone: '요청 서비스 없음' }[s.ended_reason] || s.ended_reason }}</span>
               <span v-else-if="s.dirty" class="faint"> 갱신 대기</span>
               <span v-else-if="s.active_run" class="faint"> 갱신 중</span>
             </td>

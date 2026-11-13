@@ -356,6 +356,8 @@ def collect(
                         lineno=ad.lineno,
                         args=ad.args,
                         is_async=ad.is_async,
+                        arg_types=dict(getattr(ad, "arg_types", {})),
+                        returns=getattr(ad, "returns", None),
                     )
                     action_names.append(ad.name)
             reg.services[sd.name] = ServiceSpec(

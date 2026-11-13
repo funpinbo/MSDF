@@ -152,6 +152,7 @@ When `msdf check` and `msdf up` read the files, they check the following and rep
 | An IAM `flow` rule is missing a layer condition, or uses an unknown layer or level | error |
 | An Action is reachable from two services at once | error |
 | A service referenced by a DAG is not in this project | error (warning with `--allow-external`, checked at registration) |
+| The type hints of an output and the input it connects to clearly differ (`list` → `dict`, …). Also the result and the `on_success` input | error |
 | An output slot is not connected anywhere | warning |
 | An Action belongs to no service | warning |
 
@@ -166,7 +167,7 @@ msdf check [--root .] [--config DIR] [--allow-external] [--no-cache]
 msdf up    [--root .] [--config DIR] [--allow-external] [--no-cache]
            [--host 127.0.0.1] [--port 8787] [--db PATH] [--token SECRET]
            [--lease-ttl 60] [--keep-generations 3] [--keep-versions 3] [--no-ui] [--ui-dist DIR]
-           [--refresh-min-gap 1] [--max-subscriptions 1000]
+           [--refresh-min-gap 1] [--max-subscriptions 1000] [--subscription-idle 600]
 
 # ask a running engine (--engine defaults to MSDF_SCHEDULER or http://127.0.0.1:8787, --token to MSDF_TOKEN)
 msdf status [--engine URL] [--token SECRET]        # which services are connected, last hour summary
@@ -190,6 +191,7 @@ msdf invalidate SERVICE.ACTION [--param k=v ...] [--data-version V] [--engine UR
 | `--token` | `MSDF_TOKEN` | engine token. When set, services, the web UI, `msdf status` and so on must all send the same value |
 | `--refresh-min-gap` | 1 | minimum gap between refreshes of one subscription (seconds). Bursts of changes never recompute more often than this |
 | `--max-subscriptions` | 1000 | maximum number of live subscriptions |
+| `--subscription-idle` | 600 | end a service's subscriptions when it has been disconnected this long (seconds) |
 | `--no-cache` | off | do not use the code analysis cache (`<config>/.msdf/scan.cache`), which skips re-reading unchanged files |
 
 Service-side environment variables: `MSDF_SCHEDULER` (engine address, default `http://127.0.0.1:8787`), `MSDF_TOKEN` (engine token).

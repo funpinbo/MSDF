@@ -80,6 +80,9 @@ def summarize(rows) -> tuple[dict, list]:
     return stats, outliers
 ```
 
+- **타입 힌트를 적으면 DAG 연결을 검사합니다.** 보내는 쪽 반환 타입과 받는 쪽 인자 타입이 `list`와 `dict`처럼 명백히 다르면
+  `msdf check`(그리고 DAG 편집기)가 실행 전에 막습니다. 코드를 실행하지 않고 힌트 글자만 비교하므로, 판단할 수 없는 힌트(직접 만든 클래스,
+  `Any`, `Sequence` 같은 추상 타입)나 힌트가 없는 경우는 검사하지 않습니다. `int` → `float`처럼 파이썬이 받아 주는 것은 허용합니다.
 - `async def`로 써도 됩니다.
 
 ### 저장할 수 있는 데이터
@@ -259,7 +262,7 @@ def on_search_result(result: str, meta: dict, refresh: int):
 - **다시 계산한 결과가 지난번과 같으면 보내지 않습니다.** 사용자에게 같은 답이 반복되지 않습니다.
 - 변경이 몰려도 한 구독에 refresh는 한 번에 하나이고, 최소 간격(`msdf up --refresh-min-gap`, 기본 1초)을 둡니다. refresh 도중에 또 바뀌면 끝난 뒤 한 번 더 합니다.
 - refresh마다 IAM을 다시 검사합니다. 권한이 없어졌으면 구독을 끝내고 `on_fail`에 `status="cancelled"`와 이유(`error`)를 보냅니다.
-- 끝나는 때: 기간 만료, `cancel(request_id)`, 권한이 없어짐, DAG가 바뀌어 같은 요청을 만들 수 없음. `subscribe=True`(만료 없음)는 `msdf up --max-subscriptions`(기본 1000) 안에서만 됩니다.
+- 끝나는 때: 기간 만료, `cancel(request_id)`, 권한이 없어짐, DAG가 바뀌어 같은 요청을 만들 수 없음, 요청 서비스가 `--subscription-idle`(기본 10분) 동안 연결되지 않음(그 전에 돌아오면 이어짐). `subscribe=True`(만료 없음)는 `msdf up --max-subscriptions`(기본 1000) 안에서만 됩니다.
 - MSDF는 source를 직접 확인하지 않습니다. 바뀌었다는 신호는 데이터를 읽는 서비스의 `invalidate()`뿐입니다.
 
 ## `cancel()`

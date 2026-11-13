@@ -239,3 +239,59 @@ def test_order_subscribe_argument_parsing():
     assert _subscribe_seconds("30m") == 1800.0
     with pytest.raises(OrderError):
         _subscribe_seconds("soon")
+
+
+def test_subscription_ends_when_the_requester_is_gone_too_long(sub):
+    t = [1000.0]
+    with LocalRunner(
+        sub, settings=Settings(refresh_min_gap=0, subscription_idle=600), sleep=False
+    ) as r:
+        r.engine.clock = lambda: t[0]
+        r.engine.available = {"src", "mid", "req"}  # msdf up처럼 연결 상태를 아는 엔진
+        r.order("number", {"n": 3}, requester="req", subscribe=0)
+        r.run_until_idle()
+        r.engine.available = {"src", "mid"}  # req가 내려감
+        r.engine.pump()
+        t[0] += 599
+        r.engine.pump()
+        assert r.engine.subscriptions()[0]["status"] == "active"
+        assert r.engine.next_wakeup() == pytest.approx(1600.0)
+        t[0] += 2
+        r.engine.pump()
+        [s] = r.engine.subscriptions()
+        assert s["status"] == "ended" and s["ended_reason"] == "requester_gone"
+
+
+def test_requester_coming_back_resets_the_idle_clock(sub):
+    t = [1000.0]
+    with LocalRunner(
+        sub, settings=Settings(refresh_min_gap=0, subscription_idle=600), sleep=False
+    ) as r:
+        r.engine.clock = lambda: t[0]
+        r.engine.available = {"src", "mid", "req"}
+        r.order("number", {"n": 3}, requester="req", subscribe=0)
+        r.run_until_idle()
+        r.engine.available = {"src", "mid"}
+        r.engine.pump()
+        t[0] += 500
+        r.engine.available = {"src", "mid", "req"}  # 재시작해서 돌아옴
+        r.engine.pump()
+        r.engine.available = {"src", "mid"}
+        t[0] += 400
+        r.engine.pump()  # 다시 내려감: 시계는 처음부터
+        t[0] += 300
+        r.engine.pump()
+        assert r.engine.subscriptions()[0]["status"] == "active"
+
+
+def test_local_runner_never_ends_subscriptions_for_idleness(sub):
+    t = [1000.0]
+    with LocalRunner(
+        sub, settings=Settings(refresh_min_gap=0, subscription_idle=1), sleep=False
+    ) as r:
+        r.engine.clock = lambda: t[0]
+        r.order("number", {"n": 3}, requester="req", subscribe=0)
+        r.run_until_idle()
+        t[0] += 10_000
+        r.engine.pump()
+        assert r.engine.subscriptions()[0]["status"] == "active"

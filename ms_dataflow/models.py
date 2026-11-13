@@ -90,6 +90,9 @@ class ActionSpec(Frozen):
     lineno: int
     args: tuple[str, ...] = ()
     is_async: bool = False
+    # 타입 힌트 원문 (코드를 실행하지 않고 ast에서 읽는다). DAG 연결의 타입 검사에 쓴다
+    arg_types: dict[str, str] = Field(default_factory=dict)
+    returns: str | None = None
 
     @property
     def ref(self) -> str:
@@ -225,6 +228,7 @@ class Settings(Frozen):
     max_replans: int = 3
     refresh_min_gap: float = 1.0  # 구독 refresh 사이 최소 간격(초)
     max_subscriptions: int = 1000  # 동시에 살아 있는 구독 수 상한
+    subscription_idle: float = 600.0  # 요청 서비스가 이만큼(초) 연결되지 않으면 구독을 끝낸다
 
 
 # --- 엔진 ↔ 서비스 HTTP ----------------------------------------------------

@@ -76,6 +76,7 @@ def cmd_up(args: argparse.Namespace) -> int:
         keep_versions=args.keep_versions,
         refresh_min_gap=args.refresh_min_gap,
         max_subscriptions=args.max_subscriptions,
+        subscription_idle=args.subscription_idle,
     )
     db = args.db or str(Path(args.config or args.root) / ".msdf" / "msdf.db")
     if args.ui_dist:
@@ -318,6 +319,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     up.add_argument(
         "--max-subscriptions", type=int, default=1000, help="동시에 살아 있는 구독 수 상한"
+    )
+    up.add_argument(
+        "--subscription-idle",
+        type=float,
+        default=600.0,
+        help="요청 서비스가 이만큼(초) 연결되지 않으면 그 서비스의 구독을 끝낸다",
     )
     up.add_argument("--no-ui", action="store_true", help="웹 UI를 띄우지 않는다")
     up.add_argument(

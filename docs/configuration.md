@@ -151,6 +151,7 @@ ID는 `ms_dataflow.ids.artifact_id`로 만들어야 엔진이 미리 계산한 I
 | IAM `flow` 규칙에 계층 조건이 빠졌다, 없는 계층·레벨을 쓴다 | 오류 |
 | 두 서비스에서 동시에 닿는 Action이 있다 | 오류 |
 | DAG가 참조하는 서비스가 이 프로젝트에 없다 | 오류 (`--allow-external`이면 경고, 등록할 때 검사) |
+| 엣지로 이은 출력과 입력의 타입 힌트가 명백히 다르다 (`list` → `dict` 등). 결과와 `on_success` 입력도 | 오류 |
 | 어디에도 연결되지 않은 출력 슬롯이 있다 | 경고 |
 | 어느 서비스에도 속하지 않는 Action이 있다 | 경고 |
 
@@ -164,7 +165,7 @@ msdf check [--root .] [--config DIR] [--allow-external] [--no-cache]
 msdf up    [--root .] [--config DIR] [--allow-external] [--no-cache]
            [--host 127.0.0.1] [--port 8787] [--db PATH] [--token SECRET]
            [--lease-ttl 60] [--keep-generations 3] [--keep-versions 3] [--no-ui] [--ui-dist DIR]
-           [--refresh-min-gap 1] [--max-subscriptions 1000]
+           [--refresh-min-gap 1] [--max-subscriptions 1000] [--subscription-idle 600]
 
 # 떠 있는 엔진에 묻는다 (--engine 기본: MSDF_SCHEDULER 또는 http://127.0.0.1:8787, --token 기본: MSDF_TOKEN)
 msdf status [--engine URL] [--token SECRET]        # 서비스 연결 상태와 최근 1시간 요약
@@ -188,6 +189,7 @@ msdf invalidate SERVICE.ACTION [--param k=v ...] [--data-version V] [--engine UR
 | `--token` | `MSDF_TOKEN` | 엔진 토큰. 주면 서비스, 웹 UI, `msdf status` 등이 모두 같은 값을 보내야 한다 |
 | `--refresh-min-gap` | 1 | 구독 하나의 refresh 사이 최소 간격(초). 변경이 몰려도 이보다 자주 다시 계산하지 않음 |
 | `--max-subscriptions` | 1000 | 동시에 살아 있는 구독 수 상한 |
+| `--subscription-idle` | 600 | 요청 서비스가 이만큼(초) 연결되지 않으면 그 서비스의 구독을 끝냄 |
 | `--no-cache` | 꺼짐 | 코드 분석 캐시(`<config>/.msdf/scan.cache`)를 쓰지 않는다. 바뀌지 않은 파일은 다시 분석하지 않는 캐시다 |
 
 서비스 쪽 환경 변수: `MSDF_SCHEDULER`(엔진 주소, 기본 `http://127.0.0.1:8787`), `MSDF_TOKEN`(엔진 토큰).

@@ -10,6 +10,7 @@ import yaml
 from pydantic import ValidationError
 
 from ms_dataflow.config import format_validation, read_yaml
+from ms_dataflow.config import types as slot_types
 from ms_dataflow.errors import ConfigError
 from ms_dataflow.models import Dag, Delivery, split_ref
 from ms_dataflow.registry import Registry
@@ -180,6 +181,24 @@ def validate_dag(
                 f"엣지 {e.from_} → {e.to}: '{tn}'에 입력 슬롯 '{ts}'가 없습니다.",
                 f"입력 슬롯: {', '.join(specs[tn].inputs) or '(없음)'}",
             )
+        if (
+            fn in specs
+            and tn in specs
+            and fs in specs[fn].outputs
+            and ts in specs[tn].inputs
+            and not slot_types.compatible(
+                slot_types.output_type(specs[fn], fs), slot_types.input_type(specs[tn], ts)
+            )
+        ):
+            a, b = specs[fn], specs[tn]
+            err(
+                f"엣지 {e.from_} → {e.to}: 타입이 맞지 않습니다. "
+                f"{a.service}.{a.name}이 '{slot_types.output_type(a, fs)}'를 내보내는데 "
+                f"{b.service}.{b.name}의 '{ts}'는 '{slot_types.input_type(b, ts)}'를 받습니다.\n"
+                f"  ({a.file}:{a.lineno}, {b.file}:{b.lineno})",
+                "연결을 고치거나, 두 함수의 타입 힌트를 맞추세요. "
+                "의도한 것이라면 받는 쪽 힌트를 넓히세요(예: Any, 공통 부모 클래스).",
+            )
         if (tn, ts) in seen_inputs:
             err(f"입력 슬롯 {e.to}에 엣지가 두 개 연결되어 있습니다.")
         seen_inputs.add((tn, ts))
@@ -231,6 +250,24 @@ def validate_dag(
             if spec is None:
                 err(f"{kind} '{ref}': 서비스 '{svc}'에 Action '{act}'이 없습니다.")
                 continue
+            if (
+                kind == "on_success"
+                and len(spec.inputs) == 1
+                and rn in specs
+                and rs in specs[rn].outputs
+                and not slot_types.compatible(
+                    slot_types.output_type(specs[rn], rs),
+                    slot_types.input_type(spec, spec.inputs[0]),
+                )
+            ):
+                r = specs[rn]
+                err(
+                    f"on_success '{ref}': 타입이 맞지 않습니다. 결과 {dag.result}는 "
+                    f"'{slot_types.output_type(r, rs)}'인데 '{spec.inputs[0]}'는 "
+                    f"'{slot_types.input_type(spec, spec.inputs[0])}'를 받습니다.\n"
+                    f"  ({r.file}:{r.lineno}, {spec.file}:{spec.lineno})",
+                    "결과를 받는 Action의 타입 힌트를 결과 타입에 맞추세요.",
+                )
             if kind == "on_success" and len(spec.inputs) != 1:
                 err(
                     f"on_success '{ref}'는 입력 슬롯이 정확히 하나여야 합니다 "

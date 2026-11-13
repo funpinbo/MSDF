@@ -2,6 +2,22 @@
 
 [한국어](CHANGELOG.md) | **English**
 
+## 0.5.0 — 2026-11-13
+
+### New
+
+- **Slot type check**: when the type hints of an output and the input it connects to (including the result and the `on_success` input) clearly differ, such as `list` → `dict`, `msdf check`, `msdf up` and the DAG editor report an error before anything runs (with both files and lines). Only the hint text is compared, without running code; hints it cannot judge (your own classes, `Any`, abstract types) and missing hints are not checked. What Python accepts, such as `int` → `float`, is allowed.
+- **Ending idle subscriptions**: when the requesting service has been disconnected for `--subscription-idle` (default 600s), its subscriptions end (reason `requester_gone`). Coming back before that keeps them.
+
+### Fixed
+
+- Upgrading a DB could fail at startup when a migration step added a column to a table that did not exist yet (e.g. a 0.3-or-earlier DB going to 0.4). Such steps are now skipped; the table is created with the column.
+
+### Changed
+
+- DB schema v6 (`subscription.idle_since`). Migrated automatically at startup, with a backup.
+- `ActionSpec` in engine↔service messages gained `arg_types` and `returns` (with defaults, so 0.4 services still connect).
+
 ## 0.4.0 — 2026-11-13
 
 ### New

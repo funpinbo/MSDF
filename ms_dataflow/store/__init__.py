@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 import threading
 import warnings
@@ -15,7 +16,7 @@ from ms_dataflow.errors import ConfigError
 
 log = logging.getLogger("msdf.store")
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # 버전 n의 DB를 n+1로 올리는 SQL. 표와 인덱스 생성은 schema.sql이 (IF NOT EXISTS로) 맡으므로
 # 여기에는 기존 표를 바꾸는 문장만 둔다.
@@ -25,6 +26,7 @@ MIGRATIONS: dict[int, str] = {
     3: "",  # source_version 표만 추가 (schema.sql이 만든다)
     4: "ALTER TABLE run ADD COLUMN subscription_id TEXT; "
     "ALTER TABLE run ADD COLUMN refresh_no INTEGER NOT NULL DEFAULT 0;",
+    5: "ALTER TABLE subscription ADD COLUMN idle_since REAL;",
 }
 _MIN_SQLITE = (3, 35, 0)
 _COLD_SCHEMA = """
@@ -112,12 +114,22 @@ class Store:
         try:
             for v in range(current, SCHEMA_VERSION):
                 for stmt in filter(None, (x.strip() for x in MIGRATIONS[v].split(";"))):
+                    m = re.match(r"ALTER\s+TABLE\s+(\w+)", stmt, re.I)
+                    if m and not self._has_table(m.group(1)):
+                        # 아직 없는 표: 이후 schema.sql이 그 열까지 포함해 만든다
+                        continue
                     self.conn.execute(stmt)
             self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         except BaseException:
             self.conn.execute("ROLLBACK")
             raise
         self.conn.execute("COMMIT")
+
+    def _has_table(self, name: str) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+        ).fetchone()
+        return row is not None
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:

@@ -44,6 +44,8 @@ class ActionDecl:
     is_async: bool
     version: str
     explicit_version: bool = False
+    arg_types: dict[str, str] = field(default_factory=dict)  # 인자 → 타입 힌트 원문
+    returns: str | None = None  # 반환 타입 힌트 원문
 
 
 @dataclass
@@ -281,7 +283,9 @@ class _Scanner(ast.NodeVisitor):
                     )
                     return
         a = node.args
-        args = tuple(x.arg for x in [*a.posonlyargs, *a.args, *a.kwonlyargs])
+        all_args = [*a.posonlyargs, *a.args, *a.kwonlyargs]
+        args = tuple(x.arg for x in all_args)
+        arg_types = {x.arg: ast.unparse(x.annotation) for x in all_args if x.annotation}
         inputs = tuple(opts.get("inputs", ()))
         outputs = tuple(opts.get("outputs", ("out",)))
         params = tuple(opts.get("params", ()))
@@ -315,6 +319,8 @@ class _Scanner(ast.NodeVisitor):
                 is_async=isinstance(node, ast.AsyncFunctionDef),
                 version=str(version),
                 explicit_version=bool(opts.get("version")),
+                arg_types=arg_types,
+                returns=ast.unparse(node.returns) if node.returns else None,
             )
         )
 
