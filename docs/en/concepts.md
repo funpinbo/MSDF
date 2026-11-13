@@ -43,6 +43,7 @@ MSDF is **a layer that makes permissions, failures and tracing easy for data mov
 | **Delivery** | Result notification. On success it wakes the `on_success` Action; on final failure, the `on_fail` Action. |
 | **request_id** | The ID of one request. `order()` returns it and deliveries receive the same value. It differs per request even for the same data. |
 | **meta** | A small value attached to a request and handed back with the result (e.g. a session_id). Not used for computing (not in the cache key). |
+| **subscribe** | A request that does not end with one result: it receives the result again whenever the data it depends on changes. `order(..., subscribe="30m")`. |
 | **data_version** | The version of source data. When the service that reads it changes it with `invalidate()`, computation restarts from that step. |
 
 ### What counts as an Artifact

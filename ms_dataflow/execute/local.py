@@ -55,6 +55,7 @@ class LocalRunner:
         caller_file: str,
         meta: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
+        subscribe: float | None = None,
     ) -> str:
         requester = self.project.registry.owner_of(caller_file)
         if requester is None:
@@ -63,7 +64,12 @@ class LocalRunner:
                 "order()는 @service에서 import로 닿는 파일에서 호출하세요."
             )
         return self.order(
-            name, params, requester=requester, meta=meta, idempotency_key=idempotency_key
+            name,
+            params,
+            requester=requester,
+            meta=meta,
+            idempotency_key=idempotency_key,
+            subscribe=subscribe,
         )
 
     def order(
@@ -75,8 +81,9 @@ class LocalRunner:
         context: dict[str, str] | None = None,
         meta: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
+        subscribe: float | None = None,
     ) -> str:
-        """요청을 넣고 request_id를 돌려준다."""
+        """요청을 넣고 request_id를 돌려준다. subscribe는 초(0 = 만료 없음)."""
         ctx = context if context is not None else current_context()
         self.last = self.engine.submit(
             Order(
@@ -86,6 +93,7 @@ class LocalRunner:
                 context=ctx,
                 meta=meta or {},
                 idempotency_key=idempotency_key,
+                subscribe=subscribe,
             )
         )
         return self.last.run_id
@@ -105,6 +113,15 @@ class LocalRunner:
     def cancel(self, request_id: str) -> dict[str, Any]:
         return self.engine.cancel(request_id)
 
+    def cancel_request(self, request_id: str, caller_file: str) -> dict[str, Any]:
+        requester = self.project.registry.owner_of(caller_file)
+        if requester is None:
+            raise OrderError(f"{caller_file}이 어느 서비스에 속하는지 알 수 없습니다.")
+        try:
+            return self.engine.cancel(request_id, requester=requester)
+        except KeyError:
+            raise OrderError(f"요청 {request_id}이 없습니다.") from None
+
     def delete(self, key: str, cascade: bool, caller_file: str) -> dict[str, Any]:
         requester = self.project.registry.owner_of(caller_file)
         if requester is None:
@@ -113,6 +130,7 @@ class LocalRunner:
 
     def step_once(self) -> list[StepResult]:
         results = []
+        self.engine.pump()  # 구독: 만료 정리, source가 바뀐 구독의 refresh 시작
         for task in self.engine.ready():
             if not self.engine.lease(task.run_id, task.step_no, "local"):
                 continue

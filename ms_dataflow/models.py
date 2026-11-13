@@ -144,17 +144,20 @@ class Order(Frozen):
     params: dict[str, JsonValue] = Field(default_factory=dict)
     requester: str
     context: dict[str, str] = Field(default_factory=dict)
-    meta: dict[str, JsonValue] = Field(
-        default_factory=dict
-    )  # 결과와 함께 돌려줄 값. cache key 아님
+    # 결과와 함께 돌려줄 값. cache key 아님
+    meta: dict[str, JsonValue] = Field(default_factory=dict)
     idempotency_key: str | None = None
+    subscribe: float | None = None  # 구독 기간(초). 0 = 만료 없음, None = 구독하지 않음
 
 
 META_MAX_BYTES = 4096
 
 
 StepKind = Literal["produce", "deliver", "deliver_fail"]
-StepStatus = Literal["queued", "leased", "running", "saved", "done", "failed", "cancelled"]
+# skipped: 구독 refresh의 결과가 지난번 배달과 같아 배달하지 않은 deliver 단계
+StepStatus = Literal[
+    "queued", "leased", "running", "saved", "done", "failed", "cancelled", "skipped"
+]
 ACTIVE: tuple[StepStatus, ...] = ("queued", "leased", "running", "saved")
 
 
@@ -186,6 +189,7 @@ class StepTask(Frozen):
     request_id: str | None = None
     meta: dict[str, JsonValue] = Field(default_factory=dict)
     error: str | None = None  # deliver_fail일 때 실패 사유 (마지막 줄)
+    refresh: int = 0  # 구독: 0 = 처음 배달, 1, 2, ... = source가 바뀌어 다시 배달
 
 
 class SavedOutput(Frozen):
@@ -219,6 +223,8 @@ class Settings(Frozen):
     keep_generations: int = 3  # N: 같은 요청의 최신 generation 몇 개를 hot에 둘지
     keep_versions: int = 3  # M: 같은 자리에서 version만 다른 복제본 몇 개를 hot에 둘지
     max_replans: int = 3
+    refresh_min_gap: float = 1.0  # 구독 refresh 사이 최소 간격(초)
+    max_subscriptions: int = 1000  # 동시에 살아 있는 구독 수 상한
 
 
 # --- 엔진 ↔ 서비스 HTTP ----------------------------------------------------
@@ -244,6 +250,7 @@ class OrderRequest(Frozen):
     context: dict[str, str] = Field(default_factory=dict)
     meta: dict[str, JsonValue] = Field(default_factory=dict)
     idempotency_key: str | None = None
+    subscribe: float | None = None
 
 
 class OrderResponse(Frozen):
@@ -255,6 +262,12 @@ class OrderResponse(Frozen):
 class ResultReport(Frozen):
     instance_id: str
     result: StepResult
+
+
+class CancelRequest(Frozen):
+    instance_id: str
+    requester: str  # 자기 서비스가 낸 요청만 취소할 수 있다
+    request_id: str
 
 
 class InvalidateRequest(Frozen):

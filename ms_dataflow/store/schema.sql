@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS run (
   plan            TEXT,               -- {"steps": [노드], "cached": [노드], "joined": [노드]} (JSON)
   meta            TEXT,               -- 요청한 쪽이 붙인 correlation metadata (JSON). cache key에 들어가지 않음
   idempotency_key TEXT,               -- 요청한 쪽이 정한 키. 같은 requester + 키면 run을 새로 만들지 않음
+  subscription_id TEXT,               -- 구독에 속한 run이면 처음 요청의 run_id (= 배달되는 request_id)
+  refresh_no      INTEGER NOT NULL DEFAULT 0,  -- 0 = 처음 요청, 1, 2, ... = source가 바뀌어 다시 계산한 것
   error           TEXT,
   created_at      REAL NOT NULL,
   finished_at     REAL
@@ -104,3 +106,25 @@ CREATE TABLE IF NOT EXISTS source_version (
   changed_at REAL NOT NULL,
   PRIMARY KEY (service, action, scope)
 );
+
+-- subscribe: 결과가 기대는 source가 invalidate()되면 같은 요청을 다시 계산해 다시 배달한다
+CREATE TABLE IF NOT EXISTS subscription (
+  request_id      TEXT PRIMARY KEY,   -- 처음 요청의 run_id. refresh도 이 값으로 배달한다
+  order_name      TEXT NOT NULL,
+  requester       TEXT NOT NULL,
+  params          TEXT NOT NULL,      -- JSON
+  context         TEXT NOT NULL,      -- JSON. refresh마다 IAM을 이 값으로 다시 검사한다
+  meta            TEXT,               -- JSON
+  sources         TEXT NOT NULL,      -- [[service, action, scope], ...] 결과가 기대는 source
+  status          TEXT NOT NULL,      -- active | ended
+  ended_reason    TEXT,               -- expired | cancelled | denied | dag_changed
+  created_at      REAL NOT NULL,
+  expires_at      REAL,               -- NULL이면 만료 없음
+  dirty           INTEGER NOT NULL DEFAULT 0,  -- source가 바뀌어 다시 계산해야 함
+  active_run      TEXT,               -- 지금 도는 refresh run (한 번에 하나)
+  refresh_count   INTEGER NOT NULL DEFAULT 0,
+  last_refresh_at REAL,
+  last_delivered  TEXT,               -- 마지막으로 배달한 결과 artifact_id
+  last_checksum   TEXT                -- 그 결과의 checksum. 같으면 다시 배달하지 않는다
+);
+CREATE INDEX IF NOT EXISTS idx_subscription_status ON subscription(status);

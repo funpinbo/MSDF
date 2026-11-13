@@ -2,7 +2,7 @@
 
 **한국어** | [English](en/roadmap.md)
 
-## 현재 상태: 0.3.1
+## 현재 상태: 0.4.0
 
 한 머신에서 엔진(`msdf up`)과 여러 서비스 프로세스로 동작합니다.
 
@@ -25,6 +25,8 @@
 | 15 | DB 자동 변환, 코드 분석 캐시, `msdf init/status/runs/cancel` | 완료 (0.2) |
 | 16 | Request correlation: `request_id`, `meta`, `idempotency_key`, `on_fail`의 `error` | 완료 (0.3) |
 | 17 | Data change 1단계: `invalidate()`, `data_version`, `msdf invalidate` | 완료 (0.3) |
+| 18 | 기여 CI: 철학·구조·호환성·문서 guard, e2e, 설치 검사 | 완료 (0.3.1) |
+| 19 | Data change 2단계: `subscribe`, `cancel(request_id)`, 구독 화면 | 완료 (0.4) |
 
 ## 방향
 
@@ -34,21 +36,19 @@ MSDF가 지키려는 것은 한 문장입니다.
 
 이 방향에서 나오는 원칙:
 
-- **사용자가 외울 것을 줄인다.** 함수 일곱 개와 YAML 세 개가 전부여야 합니다. 데이터 ID, 큐, HTTP, 직렬화 포맷이 사용자 코드에 나오면 설계를 되돌립니다.
+- **사용자가 외울 것을 줄인다.** 함수 여덟 개와 YAML 세 개가 전부여야 합니다. 데이터 ID, 큐, HTTP, 직렬화 포맷이 사용자 코드에 나오면 설계를 되돌립니다.
 - **틀린 것은 실행 전에 막는다.** 런타임에 터지기보다 로딩할 때 파일, 줄, 원문, 이유, 고칠 방법을 함께 알려 줍니다.
 - **각 부분은 책임 하나만 진다.** 데이터는 Resolver, 출처는 Artifact 테이블, 권한은 IAM, 순서는 Planner.
 - **로컬에서 먼저 쓸 수 있게 한다.** 지금은 한 머신, SQLite를 전제로 합니다. 여러 머신으로 퍼지는 기능은 그 다음입니다.
 
 ## 다음에 할 것
 
-0.4의 중심은 **data change 2단계(subscribe)** 입니다. 설계는 정했습니다: refresh도 원래 request_id로 배달, 결과가 같으면 다시 배달하지 않음.
+Data change(`invalidate`, `subscribe`)로 "데이터 변화에 반응한다"는 출발점이 갖춰졌습니다. 다음은 실시간 응답의 속도와 개발 경험입니다.
 
 | 항목 | 내용 |
 | --- | --- |
-| **subscribe** (0.4) | `order(..., subscribe="30m")`. 결과가 기대는 source가 `invalidate()`되면 같은 params·meta로 다시 계산해 다시 배달. debounce, IAM 재검사, 만료 |
-| 구독 화면 (0.4) | UI에 구독 목록, refresh 표시, invalidate 이력 |
 | 슬롯 타입 검사 | DAG로 잇는 출력·입력 슬롯의 타입 힌트가 맞는지 로딩할 때 검사 |
-| 서비스 코드에서 취소 | `cancel(request_id)`. 사용자가 질문을 바꾸면 이전 요청을 끊기 |
+| 구독 대기 해소 | 요청 서비스가 오래 떠 있지 않으면 구독을 끝내기 (지금은 만료까지 유지) |
 | 영어 메시지와 UI | 지금은 CLI 출력, 오류 메시지, 웹 UI가 한국어다 |
 | 같은 서비스에서 이어지는 단계의 메모리 재사용 | 방금 저장한 출력을 다시 읽지 않기. 실시간 응답 지연을 줄인다. 측정 후 결정 |
 | 큰 데이터·스트리밍 | Action 안에서 저장소를 직접 읽고 쓰는 `ctx.load()`, `ctx.save()` |

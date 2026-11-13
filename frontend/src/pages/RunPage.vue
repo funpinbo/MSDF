@@ -24,13 +24,20 @@ const { error } = usePoll(async () => {
 const cancelling = ref(false)
 const cancelMsg = ref('')
 async function cancelRun() {
-  if (!confirm('이 실행을 취소할까요? 요청한 서비스에는 실패 배달(status="cancelled")이 갑니다.')) return
+  const running = data.value?.run.status === 'running'
+  const msg = running
+    ? '이 실행을 취소할까요? 요청한 서비스에는 실패 배달(status="cancelled")이 갑니다.'
+    : '구독을 끝낼까요? source가 바뀌어도 더는 다시 계산하거나 배달하지 않습니다.'
+  if (!confirm(msg)) return
   cancelling.value = true
   try {
-    const out = await api.post(`/api/runs/${route.params.id}/cancel`)
-    cancelMsg.value = out.ok
-      ? `단계 ${out.cancelled}개를 멈췄습니다` + (out.kept ? ` (다른 요청과 공유하는 단계 ${out.kept}개는 계속 실행)` : '')
-      : `이미 ${out.status} 상태입니다`
+    const id = data.value?.subscription?.request_id || route.params.id
+    const out = await api.post(`/api/runs/${id}/cancel`)
+    cancelMsg.value = !out.ok
+      ? `이미 ${out.status} 상태입니다`
+      : out.cancelled || out.kept
+        ? `단계 ${out.cancelled}개를 멈췄습니다` + (out.kept ? ` (다른 요청과 공유하는 단계 ${out.kept}개는 계속 실행)` : '') + (out.subscription_ended ? ' · 구독도 끝냈습니다' : '')
+        : '구독을 끝냈습니다'
   } catch (e) {
     cancelMsg.value = e.message
   } finally {
@@ -72,6 +79,7 @@ function bar(s) {
           <div class="grow" />
           <span v-if="cancelMsg" class="faint">{{ cancelMsg }}</span>
           <button v-if="data.run.status === 'running'" class="danger" :disabled="cancelling" @click="cancelRun">실행 취소</button>
+          <button v-else-if="data.subscription?.status === 'active'" class="danger" :disabled="cancelling" @click="cancelRun" title="더는 다시 계산하거나 배달하지 않습니다">구독 끝내기</button>
         </div>
         <div class="meta">
           <span><span class="faint">요청</span> {{ data.run.requester }}</span>
@@ -80,6 +88,8 @@ function bar(s) {
           <span><span class="faint">params</span> <code>{{ JSON.stringify(data.run.params) }}</code></span>
           <span v-if="Object.keys(data.run.context).length"><span class="faint">context</span> <code>{{ JSON.stringify(data.run.context) }}</code></span>
           <span v-if="data.run.meta && Object.keys(data.run.meta).length" title="요청한 쪽이 붙인 값. 계산에는 쓰이지 않고 배달 Action에 그대로 돌아간다"><span class="faint">meta</span> <code>{{ JSON.stringify(data.run.meta) }}</code></span>
+          <span v-if="data.run.subscription_id && data.run.refresh_no"><span class="faint">구독 refresh</span> #{{ data.run.refresh_no }} · <router-link :to="`/runs/${data.run.subscription_id}`">처음 요청</router-link></span>
+          <span v-else-if="data.run.subscription_id"><span class="faint">구독</span> <router-link to="/logs/subscriptions">구독 목록</router-link></span>
           <span v-if="data.run.idempotency_key"><span class="faint">idempotency_key</span> <code>{{ data.run.idempotency_key }}</code></span>
           <span v-if="data.run.plan"><span class="faint">계획</span> 실행 {{ data.run.plan.steps.length }} · 캐시 {{ data.run.plan.cached.length }} · 합류 {{ data.run.plan.joined.length }}</span>
           <span v-if="data.run.replans"><span class="faint">재계획</span> {{ data.run.replans }}회</span>

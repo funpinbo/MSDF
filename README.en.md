@@ -14,7 +14,7 @@ the chatbot ends up owning "what to call, in which order, where to keep the resu
 a lot of data. MSDF moves that conductor role out of the features, so they run on data changes without knowing about each other.
 Adding or removing a feature then means editing only the DAG. → [Why MSDF](docs/en/background.md)
 
-> Current version **0.3.1**: runs on one machine as an engine plus several service processes. It is not on PyPI yet;
+> Current version **0.4.0**: runs on one machine as an engine plus several service processes. It is not on PyPI yet;
 > [install it from the repository or a git URL](docs/en/installation.md). What changed is in the [changelog](CHANGELOG.en.md); remaining work is in the [roadmap](docs/en/roadmap.md).
 >
 > CLI output, error messages and the web UI are currently in Korean. The bundled example uses Korean sample data.
@@ -99,7 +99,7 @@ python transform.py
 python app.py
 ```
 
-All you use is seven names — `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate` — and three YAML files.
+All you use is eight names — `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate`, `cancel` — and three YAML files.
 Data IDs, cache keys, queues, leases and serialization are handled by the engine and never appear in your code.
 
 ## What gets better
@@ -112,6 +112,7 @@ Data IDs, cache keys, queues, leases and serialization are handled by the engine
 6. **Restart from where it failed.** Each step is stored, and work from a dead Worker is picked up by another instance.
 7. **Results reach exactly who asked.** `order()` returns a request_id and deliveries get back your `meta` (e.g. a session_id). Many users asking the same question: computed once, answered to each.
 8. **When data changes, recompute from where it changed.** When the service that reads the data calls `invalidate()`, only that step and its downstream steps are recomputed.
+9. **Open requests receive new results.** With `order(..., subscribe="30m")`, every data change is recomputed and delivered again with the same request_id. Unchanged results are not sent.
 
 ## What it does not do
 
@@ -145,7 +146,7 @@ Data itself moves only between service processes and storage. The engine only sa
 | [Installation](docs/en/installation.md) | Three ways to install without PyPI (repository, git URL, wheel) |
 | [Getting started](docs/en/getting-started.md) | Run the example in 5 minutes, then attach MSDF to your project |
 | [Concepts](docs/en/concepts.md) | Service, Action, Order, DAG, Artifact, caching and failure handling |
-| [Writing services](docs/en/writing-services.md) | How to use `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate` |
+| [Writing services](docs/en/writing-services.md) | How to use `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate`, `cancel` |
 | [Configuration](docs/en/configuration.md) | DAG, IAM and resolvers YAML, load-time validation, the `msdf` command |
 | [How it works](docs/en/how-it-works.md) | Processes, step execution, failure handling, retention and deletion |
 | [Roadmap](docs/en/roadmap.md) | Current status, direction, what comes next |

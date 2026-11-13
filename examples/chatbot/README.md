@@ -43,6 +43,9 @@ uv run python chatbot.py        # 터미널 5 — 질문을 입력한다 (빈 �
 
 웹 UI는 저장소 루트에서 한 번 빌드해야 보입니다: `cd frontend && npm install && npm run build`.
 
+질문한 뒤 `sample_docs.json`의 답(예: "7일"을 "14일"로)을 고쳐 저장해 보세요. `search.py`가 바뀐 것을 알아채 `invalidate()`하고,
+열려 있는 대화에 `(갱신)` 답이 다시 옵니다(챗봇은 `subscribe="10m"`로 묻습니다). 다른 질문의 답은 바뀌지 않았으므로 다시 오지 않습니다.
+
 ## 파일
 
 | 파일 | 내용 |

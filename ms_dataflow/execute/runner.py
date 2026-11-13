@@ -42,7 +42,7 @@ def _error(task: StepTask, kind: str, message: str, lost: str | None = None) -> 
     )
 
 
-DELIVERY_ARGS = ("request_id", "meta", "error")
+DELIVERY_ARGS = ("request_id", "meta", "error", "refresh")
 
 
 def _delivery_extras(fn: Callable[..., Any], task: StepTask) -> dict[str, Any]:
@@ -52,7 +52,11 @@ def _delivery_extras(fn: Callable[..., Any], task: StepTask) -> dict[str, Any]:
     except (TypeError, ValueError):  # pragma: no cover
         return {}
     accepts_any = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
-    values: dict[str, Any] = {"request_id": task.request_id, "meta": dict(task.meta)}
+    values: dict[str, Any] = {
+        "request_id": task.request_id,
+        "meta": dict(task.meta),
+        "refresh": task.refresh,
+    }
     if task.kind == "deliver_fail":
         values["error"] = task.error
     return {k: v for k, v in values.items() if k in params or accepts_any}

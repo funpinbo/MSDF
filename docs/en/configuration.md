@@ -166,11 +166,12 @@ msdf check [--root .] [--config DIR] [--allow-external] [--no-cache]
 msdf up    [--root .] [--config DIR] [--allow-external] [--no-cache]
            [--host 127.0.0.1] [--port 8787] [--db PATH] [--token SECRET]
            [--lease-ttl 60] [--keep-generations 3] [--keep-versions 3] [--no-ui] [--ui-dist DIR]
+           [--refresh-min-gap 1] [--max-subscriptions 1000]
 
 # ask a running engine (--engine defaults to MSDF_SCHEDULER or http://127.0.0.1:8787, --token to MSDF_TOKEN)
 msdf status [--engine URL] [--token SECRET]        # which services are connected, last hour summary
 msdf runs   [--engine URL] [--token SECRET] [--limit 20] [--status running|done|failed|cancelled]
-msdf cancel RUN_ID [--engine URL] [--token SECRET] # cancel a running run
+msdf cancel RUN_ID [--engine URL] [--token SECRET] # cancel a running run; ends its subscription too
 msdf invalidate SERVICE.ACTION [--param k=v ...] [--data-version V] [--engine URL] [--token SECRET]
                                                    # announce that source data changed (webhooks, operators)
 ```
@@ -187,6 +188,8 @@ msdf invalidate SERVICE.ACTION [--param k=v ...] [--data-version V] [--engine UR
 | `--no-ui` | off | do not serve the web pages (`/ui`). The JSON API stays, so `msdf status`, `runs` and so on keep working |
 | `--ui-dist` | `ui/dist` inside the package | a built web UI folder. Also settable with the `MSDF_UI_DIST` environment variable |
 | `--token` | `MSDF_TOKEN` | engine token. When set, services, the web UI, `msdf status` and so on must all send the same value |
+| `--refresh-min-gap` | 1 | minimum gap between refreshes of one subscription (seconds). Bursts of changes never recompute more often than this |
+| `--max-subscriptions` | 1000 | maximum number of live subscriptions |
 | `--no-cache` | off | do not use the code analysis cache (`<config>/.msdf/scan.cache`), which skips re-reading unchanged files |
 
 Service-side environment variables: `MSDF_SCHEDULER` (engine address, default `http://127.0.0.1:8787`), `MSDF_TOKEN` (engine token).

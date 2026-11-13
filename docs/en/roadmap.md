@@ -2,7 +2,7 @@
 
 [한국어](../roadmap.md) | **English**
 
-## Current status: 0.3.1
+## Current status: 0.4.0
 
 Runs on one machine as an engine (`msdf up`) plus several service processes.
 
@@ -25,6 +25,8 @@ Runs on one machine as an engine (`msdf up`) plus several service processes.
 | 15 | Automatic DB migration, code analysis cache, `msdf init/status/runs/cancel` | done (0.2) |
 | 16 | Request correlation: `request_id`, `meta`, `idempotency_key`, `error` for `on_fail` | done (0.3) |
 | 17 | Data change step 1: `invalidate()`, `data_version`, `msdf invalidate` | done (0.3) |
+| 18 | Contribution CI: philosophy, architecture, compatibility and docs guards, e2e, install checks | done (0.3.1) |
+| 19 | Data change step 2: `subscribe`, `cancel(request_id)`, subscriptions page | done (0.4) |
 
 ## Direction
 
@@ -34,22 +36,19 @@ One sentence sums up what MSDF tries to keep:
 
 The principles that follow from it:
 
-- **Less to memorize.** Seven functions and three YAML files should be everything. If data IDs, queues, HTTP or serialization formats show up in user code, the design is rolled back.
+- **Less to memorize.** Eight functions and three YAML files should be everything. If data IDs, queues, HTTP or serialization formats show up in user code, the design is rolled back.
 - **Stop mistakes before running.** Rather than failing at runtime, report at load time with file, line, source, reason and how to fix.
 - **Each part has one responsibility.** Data: Resolver. Provenance: Artifact table. Permissions: IAM. Order: Planner.
 - **Usable locally first.** For now: one machine, SQLite. Spreading over several machines comes after.
 
 ## What comes next
 
-The center of 0.4 is **data change step 2 (subscribe)**. The design is settled: refreshes are delivered with the original request_id, and an
-unchanged result is not delivered again.
+With data change (`invalidate`, `subscribe`), the starting point — "react to data change" — is in place. Next come interactive speed and developer experience.
 
 | Item | Contents |
 | --- | --- |
-| **subscribe** (0.4) | `order(..., subscribe="30m")`. When a source the result depends on is `invalidate()`d, recompute with the same params and meta and deliver again. Debounce, IAM re-check, expiry |
-| Subscription page (0.4) | subscriptions list, refresh marks and invalidation history in the UI |
 | Slot type check | check at load time that the type hints of output and input slots connected by a DAG match |
-| Cancelling from service code | `cancel(request_id)`: drop the previous request when the user changes the question |
+| Ending idle subscriptions | end a subscription when the requesting service has been gone for long (today it lasts until expiry) |
 | English messages and UI | CLI output, error messages and the web UI are in Korean today |
 | Reusing memory between consecutive steps in the same service | skip re-reading an output that was just saved, to cut interactive latency. Decide after measuring |
 | Large data and streaming | `ctx.load()`, `ctx.save()` for reading and writing storage directly inside an Action |

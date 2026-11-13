@@ -92,6 +92,7 @@ queued → leased → running → saved → done
 | Input data disappeared from storage | the data is marked "lost" and the run is re-planned (up to 3 times) |
 | Several services request the same result at once | computed once, delivered once per request |
 | The engine restarts | step states are in the DB, so work continues once services register again |
+| A subscribed request's source is `invalidate()`d | a refresh run recomputes from the changed step. If the result equals the last delivery, the delivery step is `skipped` and nothing is sent. If permission was lost, the subscription ends and `on_fail` gets `"cancelled"` |
 | Someone cancels a run (UI, `msdf cancel`) | steps used only by that run are stopped as `cancelled` and `on_fail` gets `"cancelled"`. Steps other runs have joined keep running. A step already running in a service finishes, but its result is discarded. The run's status is `cancelled` |
 
 ## Retention
@@ -144,6 +145,7 @@ Served with `msdf up` at `http://127.0.0.1:8787/ui`. It is a Vue app, and only i
 | Logs | Tabs for runs, steps, services, DAGs and the engine log. Filter by service, DAG, status and search text; click a step to see the error text and the lineage of its input and output data |
 | Run detail | One run's DAG graph (with cache, joined and failed marks), step timeline, failure location and the lineage of the result data. **Cancel run** while it is running |
 | Permissions | Edit, validate and save IAM layers and rules as tables. Try a permission |
+| Logs › Subscriptions | live and ended subscriptions, refresh counts, sources they depend on. Refresh marks and "end subscription" on the run detail page |
 
 The pages re-read data only when the engine sends a change signal over `/api/stream` (Server-Sent Events). If the signal is lost they fall back
 to reading every 2 seconds, and the indicator at the top changes from "실시간" (live) to "폴링" (polling).
@@ -164,3 +166,4 @@ The same information is available as a JSON API.
 | `POST /api/invalidate` | announce a source data change `{"action": "service.action", "params": {...}, "data_version": "..."}` (available even with `--no-ui`) |
 | `GET /api/iam`, `POST /api/iam/validate`, `PUT /api/iam`, `POST /api/iam/try` | read, validate, save IAM; try a permission |
 | `GET /api/stream` | change signals (Server-Sent Events) |
+| `GET /api/subscriptions` | subscriptions (status, refresh count, sources they depend on, expiry) |

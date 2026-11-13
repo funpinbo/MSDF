@@ -2,6 +2,25 @@
 
 **한국어** | [English](CHANGELOG.en.md)
 
+## 0.4.0 — 2026-11-13
+
+### 새 기능
+
+- **구독 (`subscribe`)**: `order(..., subscribe="30m")`. 그동안 결과가 기대는 source가 `invalidate()`되면 엔진이 바뀐 단계부터 다시 계산해 **같은 배달 Action으로, 처음 request_id와 meta 그대로** 다시 보냅니다(data change 2단계).
+  - 몇 번째인지는 배달 Action의 `refresh` 인자(0, 1, 2, …)로 압니다.
+  - 다시 계산한 결과가 지난번과 같으면 보내지 않습니다(배달 단계는 `skipped`).
+  - 한 구독에 refresh는 한 번에 하나, 최소 간격 `--refresh-min-gap`(기본 1초). refresh 도중 또 바뀌면 한 번 더.
+  - refresh마다 IAM 재검사. 권한이 없어지면 구독을 끝내고 `on_fail`에 `"cancelled"`와 이유.
+  - 기간 만료, `cancel()`, DAG 변경으로 끝납니다. 살아 있는 구독 수 상한 `--max-subscriptions`(기본 1000).
+- **`cancel(request_id)`**: 서비스 코드에서 자기 요청을 멈추거나 구독을 끝냅니다. 공개 함수가 여덟 개가 되었습니다.
+- 웹 UI: 로그 › 구독 탭, 실행 상세의 refresh 표시와 "구독 끝내기". API `GET /api/subscriptions`.
+- 예시 챗봇: 대화마다 `subscribe="10m"`로 묻고, `search.py`가 `sample_docs.json`이 바뀌면 `invalidate()`합니다. 새 질문을 하면 지난 질문의 구독은 `cancel()`합니다.
+
+### 바뀐 것
+
+- DB 스키마 v5 (`subscription` 표, `run.subscription_id`, `run.refresh_no`). 시작할 때 자동 변환, 백업 남김.
+- 엔진↔서비스 메시지에 `OrderRequest.subscribe`, `StepTask.refresh`, `CancelRequest`가 추가되었습니다(모두 기본값이 있어 0.3 서비스도 붙습니다).
+
 ## 0.3.1 — 2026-11-13
 
 ### 고친 것

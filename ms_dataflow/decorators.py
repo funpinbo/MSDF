@@ -201,7 +201,10 @@ class OrderBackend(Protocol):
         caller_file: str,
         meta: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
+        subscribe: float | None = None,
     ) -> str: ...
+
+    def cancel_request(self, request_id: str, caller_file: str) -> dict[str, Any]: ...
 
     def delete(self, key: str, cascade: bool, caller_file: str) -> dict[str, Any]: ...
 
@@ -230,6 +233,7 @@ def order(
     *,
     meta: dict[str, Any] | None = None,
     idempotency_key: str | None = None,
+    subscribe: bool | str | float | None = None,
 ) -> str:
     """결과물을 이름으로 요청한다. 즉시 반환하며, 결과는 DAG의 deliveries로 도착한다.
 
@@ -240,6 +244,10 @@ def order(
       4 KB까지.
     - idempotency_key: 같은 서비스가 같은 키로 다시 요청하면 새로 실행하지 않고 처음
       request_id를 돌려준다.
+    - subscribe: "30m"처럼 기간을 주면, 그동안 결과가 기대는 source가 invalidate()될 때마다
+      다시 계산해 같은 배달 Action으로 다시 보낸다(request_id와 meta는 처음 것 그대로,
+      ``refresh`` 인자로 몇 번째인지). 결과가 지난번과 같으면 보내지 않는다.
+      True면 만료 없음(cancel(request_id)로 끝낸다).
     요청 서비스 이름은 자동으로 채워진다.
     """
     if not _BACKEND:
@@ -248,8 +256,39 @@ def order(
         raise OrderError("meta는 dict여야 합니다 (예: {'session_id': 'abc'}).")
     caller = _realpath(sys._getframe(1).f_code.co_filename)
     return _BACKEND[0].submit(
-        name, dict(params or {}), caller, dict(meta) if meta else None, idempotency_key
+        name,
+        dict(params or {}),
+        caller,
+        dict(meta) if meta else None,
+        idempotency_key,
+        _subscribe_seconds(subscribe),
     )
+
+
+def _subscribe_seconds(value: bool | str | float | None) -> float | None:
+    if value is None or value is False:
+        return None
+    if value is True:
+        return 0.0  # 만료 없음
+    try:
+        td = parse_duration(value)
+    except ValueError as e:
+        raise OrderError(f"subscribe: {e}") from None
+    if td is None or td.total_seconds() <= 0:
+        raise OrderError("subscribe에는 '30m'처럼 0보다 긴 기간이나 True를 주세요.")
+    return td.total_seconds()
+
+
+def cancel(request_id: str) -> bool:
+    """이 서비스가 낸 요청을 취소한다. 진행 중이면 멈추고, 구독이면 구독을 끝낸다.
+
+    진행 중이던 요청이면 배달 Action(on_fail)에 status="cancelled"가 간다. 구독만 끝낸 경우에는
+    배달하지 않는다. 무엇인가를 멈췄거나 끝냈으면 True.
+    """
+    if not _BACKEND:
+        raise OrderError("엔진에 연결되지 않았습니다. 서비스 시작 시 start()를 먼저 호출하세요.")
+    caller = _realpath(sys._getframe(1).f_code.co_filename)
+    return bool(_BACKEND[0].cancel_request(request_id, caller).get("ok"))
 
 
 def delete(key: str, *, cascade: bool = False) -> int:

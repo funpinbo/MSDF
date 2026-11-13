@@ -2,7 +2,7 @@
 
 **한국어** | [English](CONTRIBUTING.en.md)
 
-현재 버전: **0.3.1.** 다음에 할 일은 [docs/roadmap.md](docs/roadmap.md)의 "다음에 할 것"에 있습니다.
+현재 버전: **0.4.0.** 다음에 할 일은 [docs/roadmap.md](docs/roadmap.md)의 "다음에 할 것"에 있습니다.
 
 ## 시작하기
 
@@ -73,7 +73,7 @@ guard가 확인하는 원칙:
 
 | 분류 | 원칙 |
 | --- | --- |
-| 철학 | 공개 함수는 일곱 개(`service`, `action`, `order`, `start`, `context`, `delete`, `invalidate`). 서비스 코드는 엔진 내부를 import하지 않고, 서비스끼리 import하지 않는다. 스케줄러·배포 도구·LLM 프레임워크 의존성을 넣지 않는다. `meta`는 cache key에 들어가지 않는다 |
+| 철학 | 공개 함수는 여덟 개(`service`, `action`, `order`, `start`, `context`, `delete`, `invalidate`, `cancel`). 서비스 코드는 엔진 내부를 import하지 않고, 서비스끼리 import하지 않는다. 스케줄러·배포 도구·LLM 프레임워크 의존성을 넣지 않는다. `meta`는 cache key에 들어가지 않는다 |
 | 구조 | 핵심 모듈(데코레이터, 레지스트리, 설정, Planner)은 서버 없이 동작한다. Planner는 순수 함수다. 메타데이터 DB에 쓰는 곳은 엔진뿐이다. 해시는 `ids.py`에서만. 라이브러리 코드는 `print`하지 않는다. 엔진↔서비스 메시지의 새 필드는 기본값을 가진다 |
 | 호환성 | cache key와 Action 버전은 같은 입력이면 MSDF 버전·파이썬 버전과 무관하게 같다. `schema.sql`을 바꾸면 `SCHEMA_VERSION`과 변환(migration)을 함께 추가한다. 버전 번호는 세 곳이 같고, CHANGELOG(ko/en)에 그 버전 항목이 있다 |
 | 문서 | 한국어와 영어 문서가 짝으로 있고 제목·코드 블록·표 수가 같다. 공개 함수와 `msdf` 명령이 모두 문서에 있다. 상대 링크가 깨지지 않았다. 파이썬 예시는 문법이 맞다 |

@@ -13,7 +13,7 @@ MSA 환경에서 **서비스끼리 서로를 몰라도 데이터를 주고받게
 결과를 어디에 두고 실패하면 어떻게 할지"까지 떠안게 됩니다. 게다가 챗봇은 데이터를 많이 바꿉니다. MSDF는 이 지휘 역할을 기능 밖으로 꺼내,
 기능들이 서로를 모른 채 데이터 변화에 따라 움직이게 합니다. 그래서 기능을 더하거나 뺄 때 DAG만 고치면 됩니다. → [만든 이유](docs/background.md)
 
-> 현재 버전 **0.3.1**: 한 머신에서 엔진과 여러 서비스 프로세스로 동작합니다. 아직 PyPI에는 없으며 [저장소나 git 주소로 설치](docs/installation.md)합니다.
+> 현재 버전 **0.4.0**: 한 머신에서 엔진과 여러 서비스 프로세스로 동작합니다. 아직 PyPI에는 없으며 [저장소나 git 주소로 설치](docs/installation.md)합니다.
 > 바뀐 점은 [변경 기록](CHANGELOG.md), 남은 일은 [로드맵](docs/roadmap.md)에 있습니다.
 
 ## 빠르게 돌려 보기
@@ -95,7 +95,7 @@ python transform.py
 python app.py
 ```
 
-사용자가 쓰는 것은 `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate` 일곱 개와 YAML 세 개가 전부입니다.
+사용자가 쓰는 것은 `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate`, `cancel` 여덟 개와 YAML 세 개가 전부입니다.
 데이터 ID, 캐시 키, 큐, lease, 직렬화는 엔진이 처리하며 사용자 코드에 나오지 않습니다.
 
 ## 무엇이 좋아지나
@@ -108,6 +108,7 @@ python app.py
 6. **실패한 곳부터 다시 시작한다.** 단계별로 저장되어 있고, 죽은 Worker의 일은 다른 인스턴스가 이어받는다.
 7. **결과가 요청한 사람에게 정확히 간다.** `order()`는 request_id를, delivery는 `meta`(예: session_id)를 돌려준다. 같은 질문을 여러 사용자가 해도 계산은 한 번, 답은 각자에게.
 8. **데이터가 바뀌면 바뀐 곳부터 다시 계산한다.** 데이터를 읽는 서비스가 `invalidate()`로 알리면, 그 단계와 하위 단계만 새로 계산한다.
+9. **열려 있는 요청은 새 결과를 다시 받는다.** `order(..., subscribe="30m")`면 데이터가 바뀔 때마다 다시 계산해 같은 request_id로 다시 배달한다. 결과가 같으면 보내지 않는다.
 
 ## 무엇을 하지 않나
 
@@ -141,7 +142,7 @@ python app.py
 | [설치](docs/installation.md) | PyPI 없이 설치하는 세 가지 방법 (저장소, git 주소, 휠) |
 | [시작하기](docs/getting-started.md) | 예제를 5분 만에 돌리고, 내 프로젝트에 붙이기 |
 | [핵심 개념](docs/concepts.md) | Service, Action, Order, DAG, Artifact와 캐시·실패 처리 |
-| [서비스 작성하기](docs/writing-services.md) | `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate` 사용법 |
+| [서비스 작성하기](docs/writing-services.md) | `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate`, `cancel` 사용법 |
 | [설정 파일](docs/configuration.md) | DAG, IAM, resolvers YAML 문법, 로딩 검증, `msdf` 명령 |
 | [내부 동작](docs/how-it-works.md) | 프로세스 구조, 단계 실행, 실패 처리, 보관과 삭제 |
 | [로드맵](docs/roadmap.md) | 현재 상태, 방향, 다음에 할 것 |

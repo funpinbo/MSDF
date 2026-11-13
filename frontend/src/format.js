@@ -6,6 +6,9 @@ export const STATUS = {
   done: '완료',
   failed: '실패',
   cancelled: '취소',
+  skipped: '같은 결과',
+  active: '구독 중',
+  ended: '끝남',
 }
 export const KIND = { produce: '생산', deliver: '배달', deliver_fail: '실패 통지' }
 

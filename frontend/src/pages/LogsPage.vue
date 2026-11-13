@@ -14,6 +14,7 @@ const TABS = [
   { id: 'steps', label: '단계' },
   { id: 'services', label: '서비스' },
   { id: 'dags', label: 'DAG' },
+  { id: 'subscriptions', label: '구독' },
   { id: 'engine', label: '엔진 로그' },
 ]
 const tab = computed(() => route.params.tab || 'runs')
@@ -40,6 +41,7 @@ const overview = ref(null)
 const runs = ref([])
 const steps = ref([])
 const events = ref([])
+const subs = ref([])
 const live = ref(true)
 const picked = ref(null)
 const eventBox = ref(null)
@@ -53,6 +55,7 @@ const { error, refresh } = usePoll(async () => {
   if (tab.value === 'steps') jobs.push(api.get('/api/steps', { ...f.value, limit: 300 }).then((s) => (steps.value = s)))
   if (tab.value === 'services' || tab.value === 'dags') jobs.push(api.get('/api/overview', { window: 0 }).then((o) => (overview.value = o)))
   if (tab.value === 'engine') jobs.push(loadEvents())
+  if (tab.value === 'subscriptions') jobs.push(api.get('/api/subscriptions').then((s) => (subs.value = s)))
   await Promise.all(jobs)
 }, 2000)
 watch(tab, () => (picked.value = null))
@@ -111,7 +114,7 @@ function rate(s) {
       <label class="row muted live"><input v-model="live" type="checkbox" /> 실시간</label>
     </div>
 
-    <div v-if="tab !== 'services' && tab !== 'dags'" class="filters row wrap">
+    <div v-if="!['services', 'dags', 'subscriptions'].includes(tab)" class="filters row wrap">
       <select v-if="tab !== 'engine'" :value="f.order" @change="setFilter({ order: $event.target.value })">
         <option value="">모든 DAG</option>
         <option v-for="d in dagNames" :key="d" :value="d">{{ d }}</option>
@@ -153,7 +156,7 @@ function rate(s) {
             <td class="faint nowrap">{{ time(r.created_at) }}</td>
             <td><b>{{ r.order_name }}</b></td>
             <td><span class="dot" :style="{ background: serviceColor(r.requester) }" />{{ r.requester }}</td>
-            <td><StatusBadge :status="r.status === 'running' ? 'running' : r.status" /><span v-if="r.replans" class="faint"> 재계획 {{ r.replans }}</span></td>
+            <td><StatusBadge :status="r.status === 'running' ? 'running' : r.status" /><span v-if="r.replans" class="faint"> 재계획 {{ r.replans }}</span><span v-if="r.refresh_no" class="faint" title="source가 바뀌어 다시 계산한 구독 refresh"> refresh #{{ r.refresh_no }}</span></td>
             <td class="num">{{ r.plan?.steps.length ?? '–' }}</td>
             <td class="num cache">{{ r.plan?.cached.length ?? '–' }}</td>
             <td class="num">{{ ms(r.duration_ms) }}</td>
@@ -161,6 +164,36 @@ function rate(s) {
             <td class="mono faint">{{ short(r.run_id) }}</td>
           </tr>
           <tr v-if="!runs.length"><td colspan="9" class="empty">실행 기록이 없습니다.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 구독 -->
+    <div v-if="tab === 'subscriptions'" class="card table-wrap">
+      <p class="faint sub-note">결과가 기대는 source가 <code>invalidate()</code>되면 다시 계산해 같은 request_id로 다시 배달합니다. 결과가 같으면 보내지 않습니다.</p>
+      <table>
+        <thead>
+          <tr><th>시작</th><th>DAG</th><th>요청 서비스</th><th>상태</th><th class="num">refresh</th><th>마지막 refresh</th><th>만료</th><th>source</th><th>meta</th><th>request</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="s in subs" :key="s.request_id" class="clickable" @click="$router.push(`/runs/${s.request_id}`)">
+            <td class="faint nowrap">{{ time(s.created_at) }}</td>
+            <td><b>{{ s.order_name }}</b></td>
+            <td><span class="dot" :style="{ background: serviceColor(s.requester) }" />{{ s.requester }}</td>
+            <td>
+              <StatusBadge :status="s.status" />
+              <span v-if="s.status === 'ended'" class="faint"> {{ { expired: '만료', cancelled: '취소', denied: '권한 없음', dag_changed: 'DAG 바뀜' }[s.ended_reason] || s.ended_reason }}</span>
+              <span v-else-if="s.dirty" class="faint"> 갱신 대기</span>
+              <span v-else-if="s.active_run" class="faint"> 갱신 중</span>
+            </td>
+            <td class="num">{{ s.refresh_count }}</td>
+            <td class="faint nowrap">{{ s.last_refresh_at ? ago(s.last_refresh_at) : '–' }}</td>
+            <td class="faint nowrap">{{ s.expires_at ? time(s.expires_at) : '없음' }}</td>
+            <td class="mono ellipsis params">{{ s.sources.join(', ') }}</td>
+            <td class="mono ellipsis params">{{ JSON.stringify(s.meta) }}</td>
+            <td class="mono faint">{{ short(s.request_id) }}</td>
+          </tr>
+          <tr v-if="!subs.length"><td colspan="10" class="empty">구독이 없습니다. <code>order(..., subscribe="30m")</code>로 만듭니다.</td></tr>
         </tbody>
       </table>
     </div>
@@ -289,6 +322,7 @@ function rate(s) {
 
 <style scoped>
 .logs { padding: 0 18px 24px; display: grid; gap: 12px; align-content: start; }
+.sub-note { margin: 10px 12px; }
 .tabs { position: sticky; top: 0; background: var(--bg); z-index: 5; padding-top: 6px; }
 .live { padding-right: 4px; font-size: 13px; }
 .filters select, .filters input { font-size: 13px; }

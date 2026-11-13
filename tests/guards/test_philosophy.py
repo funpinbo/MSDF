@@ -14,7 +14,16 @@ from _util import PKG, ROOT, imports_of, rule
 import ms_dataflow
 from ms_dataflow.registry import collect
 
-PUBLIC_API = {"service", "action", "order", "start", "context", "delete", "invalidate"}
+PUBLIC_API = {
+    "service",
+    "action",
+    "order",
+    "start",
+    "context",
+    "delete",
+    "invalidate",
+    "cancel",  # 0.4: 요청 취소와 구독 끝내기를 하나로 (unsubscribe를 따로 두지 않는다)
+}
 
 
 def test_public_api_is_small_and_deliberate():

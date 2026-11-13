@@ -164,11 +164,12 @@ msdf check [--root .] [--config DIR] [--allow-external] [--no-cache]
 msdf up    [--root .] [--config DIR] [--allow-external] [--no-cache]
            [--host 127.0.0.1] [--port 8787] [--db PATH] [--token SECRET]
            [--lease-ttl 60] [--keep-generations 3] [--keep-versions 3] [--no-ui] [--ui-dist DIR]
+           [--refresh-min-gap 1] [--max-subscriptions 1000]
 
 # 떠 있는 엔진에 묻는다 (--engine 기본: MSDF_SCHEDULER 또는 http://127.0.0.1:8787, --token 기본: MSDF_TOKEN)
 msdf status [--engine URL] [--token SECRET]        # 서비스 연결 상태와 최근 1시간 요약
 msdf runs   [--engine URL] [--token SECRET] [--limit 20] [--status running|done|failed|cancelled]
-msdf cancel RUN_ID [--engine URL] [--token SECRET] # 진행 중인 run 취소
+msdf cancel RUN_ID [--engine URL] [--token SECRET] # 진행 중인 run 취소, 구독이면 구독도 끝냄
 msdf invalidate SERVICE.ACTION [--param k=v ...] [--data-version V] [--engine URL] [--token SECRET]
                                                    # source 데이터가 바뀌었다고 알림 (webhook, 운영)
 ```
@@ -185,6 +186,8 @@ msdf invalidate SERVICE.ACTION [--param k=v ...] [--data-version V] [--engine UR
 | `--no-ui` | 꺼짐 | 웹 화면(`/ui`)을 띄우지 않음. JSON API는 그대로라 `msdf status`, `runs` 등은 동작 |
 | `--ui-dist` | 패키지 안 `ui/dist` | 빌드한 웹 UI 폴더. 환경 변수 `MSDF_UI_DIST`로도 지정 |
 | `--token` | `MSDF_TOKEN` | 엔진 토큰. 주면 서비스, 웹 UI, `msdf status` 등이 모두 같은 값을 보내야 한다 |
+| `--refresh-min-gap` | 1 | 구독 하나의 refresh 사이 최소 간격(초). 변경이 몰려도 이보다 자주 다시 계산하지 않음 |
+| `--max-subscriptions` | 1000 | 동시에 살아 있는 구독 수 상한 |
 | `--no-cache` | 꺼짐 | 코드 분석 캐시(`<config>/.msdf/scan.cache`)를 쓰지 않는다. 바뀌지 않은 파일은 다시 분석하지 않는 캐시다 |
 
 서비스 쪽 환경 변수: `MSDF_SCHEDULER`(엔진 주소, 기본 `http://127.0.0.1:8787`), `MSDF_TOKEN`(엔진 토큰).

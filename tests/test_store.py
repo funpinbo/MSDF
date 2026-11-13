@@ -12,9 +12,13 @@ def _old_sql(version: int) -> str:
     """현재 schema.sql에서 그 버전 이후에 추가된 부분을 뺀다."""
     keep = []
     sql = _schema_sql()
+    if version < 5:
+        sql = sql[: sql.index("-- subscribe:")]
     if version < 4:
         sql = sql[: sql.index("-- 데이터 주인 서비스가 invalidate()")]
     for line in sql.splitlines(keepends=True):
+        if version < 5 and line.lstrip().startswith(("subscription_id ", "refresh_no ")):
+            continue
         if version < 3 and (
             line.lstrip().startswith(("meta ", "idempotency_key "))
             or "idx_run_idempotency" in line
@@ -45,7 +49,7 @@ def _make_v1(path):
     _make(path, 1)
 
 
-@pytest.mark.parametrize("version", [1, 2, 3])
+@pytest.mark.parametrize("version", [1, 2, 3, 4])
 def test_migrates_old_versions(tmp_path, version):
     db = tmp_path / "msdf.db"
     _make(db, version)

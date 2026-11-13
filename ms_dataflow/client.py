@@ -23,6 +23,7 @@ except ImportError:  # 묶음 없이 설치한 경우. 데코레이터와 msdf c
 from ms_dataflow.decorators import context_declared, current_context, set_backend
 from ms_dataflow.errors import ORDER_ERRORS, OrderError, RegistrationError
 from ms_dataflow.models import (
+    CancelRequest,
     DeleteRequest,
     InvalidateRequest,
     OrderRequest,
@@ -198,6 +199,7 @@ class Client:
         caller_file: str,
         meta: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
+        subscribe: float | None = None,
     ) -> str:
         req = OrderRequest(
             instance_id=self.instance_id,
@@ -207,6 +209,7 @@ class Client:
             context=current_context(),
             meta=meta or {},
             idempotency_key=idempotency_key,
+            subscribe=subscribe,
         )
         try:
             resp = self.http.post(f"{self.scheduler}/order", content=req.model_dump_json())
@@ -226,6 +229,21 @@ class Client:
         )
         try:
             resp = self.http.post(f"{self.scheduler}/delete", content=req.model_dump_json())
+        except httpx.HTTPError as e:
+            raise OrderError(f"엔진에 연결할 수 없습니다 ({self.scheduler}): {e}") from None
+        if resp.status_code != 200:
+            _raise_order_error(resp)
+        out: dict[str, Any] = resp.json()
+        return out
+
+    def cancel_request(self, request_id: str, caller_file: str) -> dict[str, Any]:
+        req = CancelRequest(
+            instance_id=self.instance_id,
+            requester=self._requester(caller_file),
+            request_id=request_id,
+        )
+        try:
+            resp = self.http.post(f"{self.scheduler}/cancel", content=req.model_dump_json())
         except httpx.HTTPError as e:
             raise OrderError(f"엔진에 연결할 수 없습니다 ({self.scheduler}): {e}") from None
         if resp.status_code != 200:

@@ -43,6 +43,7 @@ MSDF는 **서비스 사이의 데이터 이동에서 권한, 실패, 추적을 �
 | **Delivery** | 결과 통지. 성공하면 `on_success`, 최종 실패하면 `on_fail` Action을 깨웁니다. |
 | **request_id** | 요청 하나의 ID. `order()`가 돌려주고 delivery에도 같은 값이 옵니다. 같은 데이터를 요청해도 요청마다 다릅니다. |
 | **meta** | 요청에 붙여 결과와 함께 돌려받는 작은 값(예: session_id). 계산에는 쓰이지 않습니다(cache key 아님). |
+| **subscribe** | 결과를 한 번 받고 끝내지 않고, 그 결과가 기대는 데이터가 바뀌면 다시 받는 요청. `order(..., subscribe="30m")`. |
 | **data_version** | source 데이터의 버전. 데이터를 읽는 서비스가 `invalidate()`로 바꾸면 그 단계부터 새로 계산됩니다. |
 
 ### 무엇이 Artifact인가

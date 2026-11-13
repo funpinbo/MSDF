@@ -233,3 +233,55 @@ def test_invalidate_over_http_and_cli(cluster, capsys):
     with pytest.raises(SystemExit) as e:
         main(["invalidate", "src.nope", *eng])
     assert "nope" in str(e.value)
+
+
+def test_subscription_is_refreshed_across_processes(cluster):
+    data = cluster.root / "data.txt"
+    data.write_text("0")
+    (cluster.root / "src.py").write_text(
+        "import os\nfrom ms_dataflow import action, service\nservice('src')\n"
+        "@action(params=['n'], outputs=['out'])\ndef make(n):\n"
+        f"    return {{'value': n + int(open({str(data)!r}).read())}}\n"
+    )
+    req = cluster.root / "req.py"
+    req.write_text(
+        req.read_text()
+        .replace(
+            'order("number", params={"n": n})', 'order("number", params={"n": n}, subscribe="10m")'
+        )
+        .replace(
+            'def on_done(result):\n    log("on_done", result)',
+            'def on_done(result, refresh, request_id):\n    log("on_done", {"v": result["value"], "refresh": refresh, "id": request_id})',
+        )
+    )
+    cluster.service("src")
+    cluster.service("mid")
+    cluster.wait_started("src", "mid")
+    cluster.service("req", TRIGGER="3")
+    wait_for(lambda: any(e == "on_done" for e, _ in read_log(cluster.root)))
+    data.write_text("10")  # source 데이터가 바뀜
+    r = httpx.post(f"{cluster.url}/api/invalidate", json={"action": "src.make", "params": {"n": 3}})
+    assert r.json()["subscriptions"] == 1
+    wait_for(lambda: len([e for e, _ in read_log(cluster.root) if e == "on_done"]) == 2)
+    first, second = [v for e, v in read_log(cluster.root) if e == "on_done"]
+    assert (first["v"], first["refresh"]) == (8, 0)
+    assert (second["v"], second["refresh"]) == (28, 1)
+    assert first["id"] == second["id"]
+    inst = next(
+        i for i in httpx.get(f"{cluster.url}/health").json()["instances"] if "req" in i["services"]
+    )
+    other = next(
+        i for i in httpx.get(f"{cluster.url}/health").json()["instances"] if "mid" in i["services"]
+    )
+    denied = httpx.post(
+        f"{cluster.url}/cancel",
+        json={"instance_id": other["id"], "requester": "mid", "request_id": first["id"]},
+    )
+    assert denied.status_code == 400  # 남의 요청은 취소할 수 없다
+    ok = httpx.post(
+        f"{cluster.url}/cancel",
+        json={"instance_id": inst["id"], "requester": "req", "request_id": first["id"]},
+    )
+    assert ok.json()["subscription_ended"]
+    r = httpx.post(f"{cluster.url}/api/invalidate", json={"action": "src.make"})
+    assert r.json()["subscriptions"] == 0

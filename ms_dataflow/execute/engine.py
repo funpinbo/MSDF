@@ -165,7 +165,14 @@ class Engine:
                    DO UPDATE SET version = excluded.version, changed_at = excluded.changed_at""",
                 (service, action, scope, _j(params) if params else None, version, now),
             )
-        return {"service": service, "action": action, "scope": scope, "version": version}
+            woken = self._mark_subscriptions(db, service, action, scope)
+        return {
+            "service": service,
+            "action": action,
+            "scope": scope,
+            "version": version,
+            "subscriptions": woken,
+        }
 
     def inflight(self, step_key: str) -> InFlight | None:
         rows = self.store.query(
@@ -244,13 +251,21 @@ class Engine:
                     )
                 return Submitted(prev["run_id"], prev["result_lineage"] or "", None, existing=True)
         dag, delivery = self.check(order)
+        if order.subscribe is not None:
+            (n,) = self.store.query("SELECT count(*) FROM subscription WHERE status = 'active'")[0]
+            if n >= self.settings.max_subscriptions:
+                raise OrderError(
+                    f"살아 있는 구독이 너무 많습니다 "
+                    f"({n}개, 상한 {self.settings.max_subscriptions}). "
+                    "subscribe에 기간을 주거나, 끝난 요청은 cancel()로 구독을 끝내세요."
+                )
         run_id = ids.run_id(f"{order.name}:{uuid.uuid4()}")
         with self.store.tx() as db:
             now = self.now()
             db.execute(
                 """INSERT INTO run (run_id, order_name, requester, params, context, meta,
-                   idempotency_key, status, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?)""",
+                   idempotency_key, subscription_id, status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)""",
                 (
                     run_id,
                     order.name,
@@ -259,10 +274,28 @@ class Engine:
                     _j(order.context),
                     meta_json,
                     order.idempotency_key,
+                    run_id if order.subscribe is not None else None,
                     now,
                 ),
             )
             p = self._enqueue(run_id, dag, delivery, order, now, first_no=1)
+            if order.subscribe is not None:
+                db.execute(
+                    """INSERT INTO subscription (request_id, order_name, requester, params,
+                       context, meta, sources, status, created_at, expires_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)""",
+                    (
+                        run_id,
+                        order.name,
+                        order.requester,
+                        _j(order.params),
+                        _j(order.context),
+                        meta_json,
+                        _j(sorted({tuple(s) for s in p.sources})),
+                        now,
+                        now + order.subscribe if order.subscribe > 0 else None,
+                    ),
+                )
         return Submitted(run_id, p.result_lineage, p)
 
     def _by_idempotency(self, requester: str, key: str) -> Any:
@@ -367,6 +400,9 @@ class Engine:
             deps = json.loads(r["deps"])
             if deps and any(v != "done" for v in self._status_of(deps).values()):
                 continue
+            if r["kind"] == "deliver" and self._unchanged(r):
+                self._skip(r, now)
+                continue
             tasks.append(self.task(r))
         return tasks
 
@@ -383,8 +419,14 @@ class Engine:
         }
         extra: dict[str, Any] = {}
         if r["kind"] in ("deliver", "deliver_fail"):
-            run = self.store.query("SELECT meta, error FROM run WHERE run_id = ?", (r["run_id"],))
-            extra["request_id"] = r["run_id"]
+            run = self.store.query(
+                "SELECT meta, error, subscription_id, refresh_no FROM run WHERE run_id = ?",
+                (r["run_id"],),
+            )
+            # 구독의 refresh도 처음 요청의 request_id로 배달한다
+            # (서비스가 새로 짝을 맞출 필요가 없다)
+            extra["request_id"] = (run and run[0]["subscription_id"]) or r["run_id"]
+            extra["refresh"] = run[0]["refresh_no"] if run else 0
             if run and run[0]["meta"]:
                 extra["meta"] = json.loads(run[0]["meta"])
             if r["kind"] == "deliver_fail" and run and run[0]["error"]:
@@ -497,6 +539,8 @@ class Engine:
                     (now, row["run_id"], row["step_no"]),
                 )
                 status = "done" if row["kind"] == "deliver" else "failed"
+                if row["kind"] == "deliver":
+                    self._remember_delivery(db, row)
                 # 취소한 run은 실패 배달이 끝나도 'cancelled'로 남는다
                 db.execute(
                     """UPDATE run
@@ -702,21 +746,259 @@ class Engine:
                 db.execute("UPDATE run SET replans = replans + 1 WHERE run_id = ?", (run_id,))
                 self._enqueue(run_id, dag, delivery, order, self.now(), first_no=next_no)
 
+    # --- 구독 --------------------------------------------------------------
+    def _mark_subscriptions(self, db: Any, service: str, action: str, scope: str) -> int:
+        """이 source에 기대는 살아 있는 구독을 '다시 계산해야 함'으로 표시한다."""
+        woken = 0
+        for sub in db.execute(
+            "SELECT request_id, sources FROM subscription WHERE status = 'active'"
+        ).fetchall():
+            for s, a, sc in json.loads(sub["sources"]):
+                if s == service and a == action and (scope == "*" or sc == scope):
+                    db.execute(
+                        "UPDATE subscription SET dirty = 1 WHERE request_id = ?",
+                        (sub["request_id"],),
+                    )
+                    woken += 1
+                    break
+        return woken
+
+    def _remember_delivery(self, db: Any, row: Any) -> None:
+        run = db.execute(
+            "SELECT subscription_id, result_artifact FROM run WHERE run_id = ?", (row["run_id"],)
+        ).fetchone()
+        if run is None or not run["subscription_id"]:
+            return
+        db.execute(
+            """UPDATE subscription SET last_delivered = ?, last_checksum = ?
+               WHERE request_id = ?""",
+            (
+                run["result_artifact"],
+                self._checksum(run["result_artifact"]),
+                run["subscription_id"],
+            ),
+        )
+
+    def _checksum(self, artifact_id: str | None) -> str | None:
+        if not artifact_id:
+            return None
+        for table in ("artifact", "cold.artifact"):
+            rows = self.store.query(f"SELECT checksum FROM {table} WHERE id = ?", (artifact_id,))
+            if rows:
+                return rows[0]["checksum"] or artifact_id
+        return None
+
+    def _unchanged(self, r: Any) -> bool:
+        """구독 refresh의 결과가 지난번 배달과 같으면 True (배달하지 않는다)."""
+        run = self.store.query(
+            "SELECT subscription_id, refresh_no, result_artifact FROM run WHERE run_id = ?",
+            (r["run_id"],),
+        )
+        if not run or not run[0]["subscription_id"] or not run[0]["refresh_no"]:
+            return False
+        sub = self.store.query(
+            "SELECT last_delivered, last_checksum FROM subscription WHERE request_id = ?",
+            (run[0]["subscription_id"],),
+        )
+        if not sub or sub[0]["last_delivered"] is None:
+            return False
+        new = run[0]["result_artifact"]
+        if new == sub[0]["last_delivered"]:
+            return True
+        checksum = self._checksum(new)
+        return checksum is not None and checksum == sub[0]["last_checksum"]
+
+    def _skip(self, r: Any, now: float) -> None:
+        with self.store.tx() as db:
+            db.execute(
+                """UPDATE step SET status = 'skipped', done_at = ?,
+                   error = '결과가 지난번 배달과 같아 다시 배달하지 않음'
+                   WHERE run_id = ? AND step_no = ?""",
+                (now, r["run_id"], r["step_no"]),
+            )
+            db.execute(
+                "UPDATE run SET status = 'done', finished_at = ? WHERE run_id = ?",
+                (now, r["run_id"]),
+            )
+
+    def pump(self, now: float | None = None) -> list[str]:
+        """구독을 돌본다: 만료를 끝내고, source가 바뀐 구독의 refresh run을 시작한다.
+
+        Scheduler의 dispatch 루프와 LocalRunner가 주기적으로 부른다. 시작한 run_id 목록을 돌려준다.
+        """
+        now = self.clock() if now is None else now
+        started: list[str] = []
+        with self.store.tx() as db:
+            db.execute(
+                """UPDATE subscription SET status = 'ended', ended_reason = 'expired'
+                   WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at <= ?""",
+                (now,),
+            )
+            # 끝난 refresh run은 놓아 준다 (한 구독에 refresh는 한 번에 하나)
+            db.execute(
+                """UPDATE subscription SET active_run = NULL
+                   WHERE active_run IS NOT NULL AND active_run IN
+                   (SELECT run_id FROM run WHERE status != 'running')"""
+            )
+        subs = self.store.query(
+            """SELECT * FROM subscription WHERE status = 'active' AND dirty = 1
+               AND active_run IS NULL AND (last_refresh_at IS NULL OR last_refresh_at + ? <= ?)""",
+            (self.settings.refresh_min_gap, now),
+        )
+        for sub in subs:
+            run_id = self._refresh(sub, now)
+            if run_id is not None:
+                started.append(run_id)
+        return started
+
+    def _refresh(self, sub: Any, now: float) -> str | None:
+        order = Order(
+            name=sub["order_name"],
+            params=json.loads(sub["params"]),
+            requester=sub["requester"],
+            context=json.loads(sub["context"]),
+            meta=json.loads(sub["meta"]) if sub["meta"] else {},
+        )
+        rid = sub["request_id"]
+        try:
+            dag, delivery = self.check(order)
+        except ServiceUnavailable:
+            return None  # 서비스가 다시 붙으면 그때 다시 계산한다 (dirty 유지)
+        except (UnknownOrder, ParamError) as e:
+            self._end_subscription(rid, "dag_changed", str(e), now)
+            return None
+        except PermissionDenied as e:
+            self._end_subscription(rid, "denied", str(e), now, notify=True)
+            return None
+        run_id = ids.run_id(f"{order.name}:refresh:{uuid.uuid4()}")
+        with self.store.tx() as db:
+            db.execute(
+                """INSERT INTO run (run_id, order_name, requester, params, context, meta,
+                   subscription_id, refresh_no, status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)""",
+                (
+                    run_id,
+                    order.name,
+                    order.requester,
+                    sub["params"],
+                    sub["context"],
+                    sub["meta"],
+                    rid,
+                    sub["refresh_count"] + 1,
+                    now,
+                ),
+            )
+            p = self._enqueue(run_id, dag, delivery, order, now, first_no=1)
+            db.execute(
+                """UPDATE subscription SET dirty = 0, active_run = ?,
+                   refresh_count = refresh_count + 1, last_refresh_at = ?, sources = ?
+                   WHERE request_id = ?""",
+                (run_id, now, _j(sorted({tuple(s) for s in p.sources})), rid),
+            )
+        return run_id
+
+    def _end_subscription(
+        self, request_id: str, reason: str, error: str, now: float, *, notify: bool = False
+    ) -> None:
+        """구독을 끝낸다. notify면 요청 서비스의 on_fail에 status="cancelled"로 알린다."""
+        sub = self.store.query("SELECT * FROM subscription WHERE request_id = ?", (request_id,))
+        if not sub or sub[0]["status"] != "active":
+            return
+        s = sub[0]
+        with self.store.tx() as db:
+            db.execute(
+                """UPDATE subscription SET status = 'ended', ended_reason = ?, dirty = 0
+                   WHERE request_id = ?""",
+                (reason, request_id),
+            )
+            if not notify:
+                return
+            run_id = ids.run_id(f"{s['order_name']}:end:{uuid.uuid4()}")
+            db.execute(
+                """INSERT INTO run (run_id, order_name, requester, params, context, meta,
+                   subscription_id, refresh_no, status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)""",
+                (
+                    run_id,
+                    s["order_name"],
+                    s["requester"],
+                    s["params"],
+                    s["context"],
+                    s["meta"],
+                    request_id,
+                    s["refresh_count"] + 1,
+                    now,
+                ),
+            )
+            self._deliver_fail(
+                db, run_id, "cancelled", f"구독이 끝났습니다: {error.splitlines()[0]}", now
+            )
+            db.execute("UPDATE run SET status = 'cancelled' WHERE run_id = ?", (run_id,))
+
+    def subscriptions(self, status: str | None = None) -> list[dict[str, Any]]:
+        rows = self.store.query(
+            "SELECT * FROM subscription"
+            + (" WHERE status = ?" if status else "")
+            + " ORDER BY created_at DESC",
+            (status,) if status else (),
+        )
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["params"] = json.loads(d["params"])
+            d["meta"] = json.loads(d["meta"]) if d["meta"] else {}
+            d["sources"] = [
+                f"{s}.{a}" + ("" if sc == "*" else " (params)")
+                for s, a, sc in json.loads(d["sources"])
+            ]
+            d.pop("context", None)
+            out.append(d)
+        return out
+
     # --- 취소 --------------------------------------------------------------
     def cancel(
-        self, run_id: str, reason: str = "사용자가 취소", now: float | None = None
+        self,
+        run_id: str,
+        reason: str = "사용자가 취소",
+        now: float | None = None,
+        requester: str | None = None,
     ) -> dict[str, Any]:
-        """진행 중인 run을 멈춘다. 요청 서비스에는 on_fail로 status="cancelled"가 배달된다.
+        """요청을 멈춘다. 진행 중이면 요청 서비스에 on_fail(status="cancelled")이 배달된다.
 
-        다른 run이 함께 기다리는(합류한) 단계는 멈추지 않는다. 이미 서비스에서 실행 중인 단계는
-        끝까지 돌지만 결과는 버린다.
+        구독이면 구독도 끝낸다(지금 도는 refresh도 멈춘다). 다른 run이 함께 기다리는(합류한)
+        단계는 멈추지 않는다. 이미 서비스에서 실행 중인 단계는 끝까지 돌지만 결과는 버린다.
+        requester를 주면 그 서비스가 낸 요청만 취소할 수 있다(서비스 코드의 cancel()).
         """
         now = self.clock() if now is None else now
         rows = self.store.query("SELECT * FROM run WHERE run_id = ?", (run_id,))
         if not rows:
             raise KeyError(run_id)
+        if requester is not None and rows[0]["requester"] != requester:
+            raise OrderError(f"요청 {run_id}은 서비스 '{requester}'가 낸 것이 아닙니다.")
+        ended = False
+        sub = self.store.query(
+            "SELECT status, active_run FROM subscription WHERE request_id = ?", (run_id,)
+        )
+        if sub and sub[0]["status"] == "active":
+            self._end_subscription(run_id, "cancelled", reason, now)
+            ended = True
+            if sub[0]["active_run"]:
+                self._cancel_run(sub[0]["active_run"], reason, now)
         if rows[0]["status"] != "running":
-            return {"ok": False, "status": rows[0]["status"], "cancelled": 0}
+            return {
+                "ok": ended,
+                "status": rows[0]["status"],
+                "cancelled": 0,
+                "kept": 0,
+                "subscription_ended": ended,
+            }
+        out = self._cancel_run(run_id, reason, now)
+        return {**out, "subscription_ended": ended}
+
+    def _cancel_run(self, run_id: str, reason: str, now: float) -> dict[str, Any]:
+        rows = self.store.query("SELECT status FROM run WHERE run_id = ?", (run_id,))
+        if not rows or rows[0]["status"] != "running":
+            return {"ok": False, "status": rows[0]["status"] if rows else None, "cancelled": 0}
         mine = self.store.query(
             f"SELECT * FROM step WHERE run_id = ? AND status IN {_ACTIVE_SQL}", (run_id,)
         )
@@ -782,5 +1064,15 @@ class Engine:
             "SELECT min(not_before) AS t FROM step WHERE status = 'queued' AND not_before > ?",
             (now,),
         )
-        t = rows[0]["t"]
-        return float(t) if t is not None else None
+        times = [rows[0]["t"]]
+        sub = self.store.query(
+            """SELECT min(last_refresh_at + ?) AS gap FROM subscription
+               WHERE status = 'active' AND dirty = 1 AND active_run IS NULL""",
+            (self.settings.refresh_min_gap,),
+        )
+        exp = self.store.query(
+            "SELECT min(expires_at) AS t FROM subscription WHERE status = 'active'"
+        )
+        times += [sub[0]["gap"], exp[0]["t"]]
+        future = [float(t) for t in times if t is not None and t > now]
+        return min(future) if future else None

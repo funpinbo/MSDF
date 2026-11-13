@@ -2,7 +2,7 @@
 
 [한국어](../writing-services.md) | **English**
 
-There are only seven things you use.
+There are only eight things you use.
 
 ```python
 from ms_dataflow import service, action, order, start, context, delete
@@ -17,6 +17,7 @@ from ms_dataflow import service, action, order, start, context, delete
 | `@context` | Marks a function that provides values for permission checks (account and so on) |
 | `delete(request_id)` | Deletes data produced by an `order()` |
 | `invalidate(action, params)` | Announces that the source data your Action reads has changed |
+| `cancel(request_id)` | Stops a request this service made, or ends its subscription |
 
 Your service code never contains other services' names, database types, storage locations or data IDs. If it does, something is being used the wrong way.
 
@@ -124,6 +125,7 @@ request_id = order("daily_stats", params={"day": day}, meta={"session_id": sid},
 | `params` | **what** to compute. Must match the first-step Action's `params` | yes |
 | `meta` | a small value to find **who** gets the result (e.g. `session_id`). The engine keeps it and hands it back to the delivery Action. JSON, up to 4 KB | no; not used by IAM either |
 | `idempotency_key` | if the same service sends the same key again, nothing new runs and the first request_id is returned. For resending after a network error | – |
+| `subscribe` | a duration such as `"30m"`: during it, whenever a source the result depends on is `invalidate()`d, recompute and deliver again. `True` means no expiry. See [Subscriptions](#subscriptions-subscribe) | – |
 
 Because `meta` is not part of the cache key, when two users ask the same question it is **computed once and delivered separately, each with its own `meta`**.
 
@@ -146,6 +148,7 @@ def on_stats_failed(status: str, meta: dict, error: str | None):
 | `request_id` | ○ | ○ | the value `order()` returned |
 | `meta` | ○ | ○ | the `meta` given to `order()` (`{}` if none) |
 | `error` | – | ○ | last line of the failure cause (`None` if none) |
+| `refresh` | ○ | ○ | subscriptions: `0` is the first delivery; `1`, `2`, … are re-deliveries after a source changed |
 
 Arguments you do not declare are not passed, so existing delivery Actions keep working. Computing (produce) Actions never receive `meta`:
 a value outside the cache key must not change a result.
@@ -222,6 +225,42 @@ def who() -> dict:
 - The returned keys must match the layer names in `iam.yaml`. If a layer used by the rules is missing, registration is refused at `start()`.
 - The engine **trusts these values as given.** How they are obtained and verified is up to the service (your authentication system).
 - Not needed if your only layer is the service.
+
+## Subscriptions (subscribe)
+
+Instead of receiving a result once, **receive it again when the data it depends on changes.** Use it to keep an answer fresh while, for example, a chat window is open.
+
+```python
+@service("chatbot")
+def ask(session_id: str, q: str) -> str:
+    return order("search_result", params={"q": q}, meta={"session_id": session_id}, subscribe="30m")
+
+@action(inputs=["result"])
+def on_search_result(result: str, meta: dict, refresh: int):
+    send_to_user(meta["session_id"], result if refresh == 0 else f"(updated) {result}")
+```
+
+- For 30 minutes, whenever one of the sources the result depends on (search, documents, …) is `invalidate()`d, the engine **recomputes with the same
+  params and meta and delivers to the same delivery Action.** The request_id is the original one, so the service needs no new bookkeeping; `refresh` tells which round it is.
+- Only the changed step and its downstream steps are recomputed (the rest comes from the cache).
+- **If the recomputed result is the same as last time, it is not delivered.** Users do not get the same answer twice.
+- However many changes arrive, one subscription has at most one refresh at a time, spaced by a minimum gap (`msdf up --refresh-min-gap`, default 1s). A change during a refresh triggers one more afterwards.
+- Every refresh is checked against IAM again. If permission was lost, the subscription ends and `on_fail` gets `status="cancelled"` with the reason (`error`).
+- It ends on: expiry, `cancel(request_id)`, lost permission, or a DAG change that makes the same request impossible. `subscribe=True` (no expiry) is allowed within `msdf up --max-subscriptions` (default 1000).
+- MSDF never checks sources itself. The only change signal is `invalidate()` from the service that reads the data.
+
+## `cancel()`
+
+```python
+request_id = order("search_result", params={"q": q}, subscribe="30m")
+# when the user changes the question or closes the chat window
+cancel(request_id)
+```
+
+- Only requests made by this service can be cancelled.
+- If it is running, it stops and `on_fail` gets `status="cancelled"`. Steps other requests are waiting on keep running.
+- If it is a subscription, the subscription ends too. Ending only the subscription of an already finished request delivers nothing.
+- Returns `True` if something was stopped or ended. Operators do the same with `msdf cancel REQUEST_ID` or from the run detail page in the web UI.
 
 ## `invalidate()`
 

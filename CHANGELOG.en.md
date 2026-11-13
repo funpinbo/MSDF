@@ -2,6 +2,25 @@
 
 [한국어](CHANGELOG.md) | **English**
 
+## 0.4.0 — 2026-11-13
+
+### New
+
+- **Subscriptions (`subscribe`)**: `order(..., subscribe="30m")`. During that time, whenever a source the result depends on is `invalidate()`d, the engine recomputes from the changed step and delivers again **to the same delivery Action, with the original request_id and meta** (data change step 2).
+  - The delivery Action's `refresh` argument (0, 1, 2, …) tells which round it is.
+  - If the recomputed result equals the last delivery, it is not sent (the delivery step is `skipped`).
+  - At most one refresh per subscription at a time, spaced by `--refresh-min-gap` (default 1s). A change during a refresh triggers one more.
+  - IAM is re-checked on every refresh. If permission was lost, the subscription ends and `on_fail` gets `"cancelled"` with the reason.
+  - Ends on expiry, `cancel()` or a DAG change. Live subscriptions are capped by `--max-subscriptions` (default 1000).
+- **`cancel(request_id)`**: stop your own request or end its subscription from service code. There are now eight public functions.
+- Web UI: Logs › Subscriptions tab, refresh marks and "end subscription" on the run detail page. API `GET /api/subscriptions`.
+- Chatbot example: each conversation asks with `subscribe="10m"`, and `search.py` calls `invalidate()` when `sample_docs.json` changes. A new question `cancel()`s the previous question's subscription.
+
+### Changed
+
+- DB schema v5 (`subscription` table, `run.subscription_id`, `run.refresh_no`). Migrated automatically at startup, with a backup.
+- Engine↔service messages gained `OrderRequest.subscribe`, `StepTask.refresh` and `CancelRequest` (all with defaults, so 0.3 services still connect).
+
 ## 0.3.1 — 2026-11-13
 
 ### Fixed

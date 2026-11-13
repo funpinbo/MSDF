@@ -25,6 +25,7 @@ from ms_dataflow.errors import OrderError, PermissionDenied, ServiceUnavailable
 from ms_dataflow.execute.engine import Engine
 from ms_dataflow.metrics import LogBuffer
 from ms_dataflow.models import (
+    CancelRequest,
     DeleteRequest,
     InvalidateRequest,
     Order,
@@ -196,6 +197,11 @@ class Scheduler:
         return idle[self._rr % len(idle)]
 
     async def dispatch_once(self) -> int:
+        started = await self.db(self.engine.pump, None)
+        for run_id in started:
+            log.info("구독 refresh: run %s", run_id)
+        if started:
+            self.version += 1
         idle_services = {s for i in self.instances.values() if i.busy is None for s in i.services}
         if not idle_services:
             return 0
@@ -355,6 +361,7 @@ class Scheduler:
                 context=req.context,
                 meta=req.meta,
                 idempotency_key=req.idempotency_key,
+                subscribe=req.subscribe,
             )
             submitted = await sched.db(sched.engine.submit, o)
             if not submitted.existing:
@@ -401,6 +408,25 @@ class Scheduler:
             )
             return out
 
+        @app.post("/cancel")
+        async def cancel(req: CancelRequest) -> dict[str, Any]:
+            inst = sched.instances.get(req.instance_id)
+            if inst is None or req.requester not in inst.services:
+                raise HTTPException(
+                    403, {"code": "order_error", "message": "등록되지 않은 인스턴스"}
+                )
+            try:
+                out: dict[str, Any] = await sched.db(
+                    lambda: sched.engine.cancel(req.request_id, requester=req.requester)
+                )
+            except KeyError:
+                raise HTTPException(
+                    404, {"code": "order_error", "message": f"요청 {req.request_id}이 없습니다"}
+                ) from None
+            log.info("cancel: %s by %s → %s", req.request_id, req.requester, out)
+            sched.kick()
+            return out
+
         @app.post("/invalidate")
         async def invalidate(req: InvalidateRequest) -> dict[str, Any]:
             inst = sched.instances.get(req.instance_id)
@@ -412,11 +438,12 @@ class Scheduler:
                 sched.engine.invalidate, req.requester, req.action, req.params, req.data_version
             )
             log.info(
-                "invalidate: %s.%s %s → %s",
+                "invalidate: %s.%s %s → %s (구독 %d개 갱신 예정)",
                 req.requester,
                 req.action,
                 req.params or "(전체)",
                 out["version"],
+                out["subscriptions"],
             )
             sched.kick()
             return out

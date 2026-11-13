@@ -130,6 +130,7 @@ def test_wire_models_are_backward_compatible():
         "StepResult": {"run_id", "step_no", "ok"},
         "ResultReport": {"instance_id", "result"},
         "InvalidateRequest": {"instance_id", "requester", "action"},
+        "CancelRequest": {"instance_id", "requester", "request_id"},
         "DeleteRequest": {"instance_id", "requester", "lineage_key"},
     }
     bad = {}

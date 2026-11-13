@@ -15,7 +15,7 @@ from ms_dataflow.errors import ConfigError
 
 log = logging.getLogger("msdf.store")
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # 버전 n의 DB를 n+1로 올리는 SQL. 표와 인덱스 생성은 schema.sql이 (IF NOT EXISTS로) 맡으므로
 # 여기에는 기존 표를 바꾸는 문장만 둔다.
@@ -23,6 +23,8 @@ MIGRATIONS: dict[int, str] = {
     1: "ALTER TABLE run ADD COLUMN plan TEXT;",
     2: "ALTER TABLE run ADD COLUMN meta TEXT; ALTER TABLE run ADD COLUMN idempotency_key TEXT;",
     3: "",  # source_version 표만 추가 (schema.sql이 만든다)
+    4: "ALTER TABLE run ADD COLUMN subscription_id TEXT; "
+    "ALTER TABLE run ADD COLUMN refresh_no INTEGER NOT NULL DEFAULT 0;",
 }
 _MIN_SQLITE = (3, 35, 0)
 _COLD_SCHEMA = """

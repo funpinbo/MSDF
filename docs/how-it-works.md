@@ -92,6 +92,7 @@ queued → leased → running → saved → done
 | 저장소에서 입력 데이터가 사라짐 | 그 데이터를 "유실"로 표시하고 run을 다시 계획 (최대 3번) |
 | 여러 서비스가 같은 결과를 동시에 요청 | 계산은 한 번만, 배달은 요청 수만큼 |
 | 엔진이 재시작됨 | 단계 상태가 DB에 있으므로 서비스가 다시 등록되면 이어서 진행 |
+| 구독한 요청의 source가 `invalidate()`됨 | refresh run을 시작해 바뀐 단계부터 다시 계산. 결과가 지난번과 같으면 배달 단계를 `skipped`로 두고 보내지 않음. 권한이 없어졌으면 구독을 끝내고 `on_fail`에 `"cancelled"` |
 | 사람이 run을 취소함 (UI, `msdf cancel`) | 그 run만 쓰는 단계를 `cancelled`로 멈추고 `on_fail`에 `"cancelled"`. 다른 run이 합류한 단계는 계속 실행. 이미 서비스에서 돌던 단계는 끝까지 돌지만 결과는 버림. run 상태는 `cancelled` |
 
 ## 데이터 보관
@@ -141,6 +142,7 @@ queued → leased → running → saved → done
 | 로그 | 실행, 단계, 서비스, DAG, 엔진 로그 탭. 서비스·DAG·상태·검색어로 거르고, 단계를 누르면 오류 원문과 입출력 데이터의 계보를 봅니다 |
 | 실행 상세 | 실행 하나의 DAG 그래프(캐시·합류·실패 표시), 단계 타임라인, 실패 위치, 결과 데이터의 계보. 진행 중이면 **실행 취소** |
 | 권한 | IAM 계층과 규칙을 표로 편집, 검증, 저장. 권한 시험 |
+| 로그 › 구독 | 살아 있는 구독과 끝난 구독, refresh 횟수, 기대는 source. 실행 상세에서 refresh 표시와 "구독 끝내기" |
 
 화면은 엔진이 `/api/stream`(Server-Sent Events)으로 보내는 변경 신호를 받을 때만 다시 읽습니다. 신호가 끊기면 2초마다 읽는 방식으로
 돌아가며, 위쪽 표시가 "실시간"에서 "폴링"으로 바뀝니다.
@@ -161,3 +163,4 @@ queued → leased → running → saved → done
 | `POST /api/invalidate` | source 데이터 변경 알림 `{"action": "service.action", "params": {...}, "data_version": "..."}` (`--no-ui`여도 있음) |
 | `GET /api/iam`, `POST /api/iam/validate`, `PUT /api/iam`, `POST /api/iam/try` | IAM 조회, 검증, 저장, 권한 시험 |
 | `GET /api/stream` | 변경 신호 (Server-Sent Events) |
+| `GET /api/subscriptions` | 구독 목록 (상태, refresh 횟수, 기대는 source, 만료) |

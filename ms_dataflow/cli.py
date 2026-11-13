@@ -74,6 +74,8 @@ def cmd_up(args: argparse.Namespace) -> int:
         reaper_every=min(10.0, args.lease_ttl / 6),
         keep_generations=args.keep_generations,
         keep_versions=args.keep_versions,
+        refresh_min_gap=args.refresh_min_gap,
+        max_subscriptions=args.max_subscriptions,
     )
     db = args.db or str(Path(args.config or args.root) / ".msdf" / "msdf.db")
     if args.ui_dist:
@@ -268,12 +270,15 @@ def cmd_invalidate(args: argparse.Namespace) -> int:
 
 def cmd_cancel(args: argparse.Namespace) -> int:
     out = _call(args, "POST", f"/api/runs/{args.run_id}/cancel")
-    if out.get("ok"):
+    if not out.get("ok"):
+        print(f"취소할 수 없습니다: 이미 {out.get('status')} 상태입니다.", file=sys.stderr)
+        return 1
+    if out.get("cancelled") or out.get("kept"):
         kept = f", 다른 요청과 공유해 계속 도는 단계 {out['kept']}개" if out.get("kept") else ""
         print(f"취소했습니다: 단계 {out['cancelled']}개 중지{kept}")
-        return 0
-    print(f"취소할 수 없습니다: 이미 {out.get('status')} 상태입니다.", file=sys.stderr)
-    return 1
+    if out.get("subscription_ended"):
+        print("구독을 끝냈습니다. 더는 다시 배달하지 않습니다.")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -308,6 +313,12 @@ def main(argv: list[str] | None = None) -> int:
     up.add_argument("--lease-ttl", type=float, default=60.0, help="단계 lease 시간(초)")
     up.add_argument("--keep-generations", type=int, default=3, help="hot에 둘 generation 수 (N)")
     up.add_argument("--keep-versions", type=int, default=3, help="hot에 둘 version 복제본 수 (M)")
+    up.add_argument(
+        "--refresh-min-gap", type=float, default=1.0, help="구독 refresh 사이 최소 간격(초)"
+    )
+    up.add_argument(
+        "--max-subscriptions", type=int, default=1000, help="동시에 살아 있는 구독 수 상한"
+    )
     up.add_argument("--no-ui", action="store_true", help="웹 UI를 띄우지 않는다")
     up.add_argument(
         "--ui-dist",

@@ -2,7 +2,7 @@
 
 **한국어** | [English](en/writing-services.md)
 
-사용자가 쓰는 것은 일곱 개뿐입니다.
+사용자가 쓰는 것은 여덟 개뿐입니다.
 
 ```python
 from ms_dataflow import service, action, order, start, context, delete
@@ -17,6 +17,7 @@ from ms_dataflow import service, action, order, start, context, delete
 | `@context` | 권한 검사에 쓸 값(계정 등)을 알려 주는 함수를 표시합니다 |
 | `delete(request_id)` | `order()`로 만든 데이터를 지웁니다 |
 | `invalidate(action, params)` | 자기 Action이 읽는 source 데이터가 바뀌었다고 알립니다 |
+| `cancel(request_id)` | 이 서비스가 낸 요청을 멈추거나 구독을 끝냅니다 |
 
 서비스 코드에는 다른 서비스의 이름, DB 종류, 저장 위치, 데이터 ID가 나오지 않습니다. 나오게 된다면 무언가 잘못 쓰고 있다는 신호입니다.
 
@@ -121,6 +122,7 @@ request_id = order("daily_stats", params={"day": day}, meta={"session_id": sid},
 | `params` | **무엇을** 계산할지. DAG 첫 단계 Action의 `params`와 맞아야 함 | 들어감 |
 | `meta` | 결과를 **누구에게** 돌려줄지 찾는 작은 값(예: `session_id`). 엔진이 보관했다가 delivery Action에 그대로 돌려줌. JSON, 4 KB까지 | 안 들어감. IAM에도 쓰지 않음 |
 | `idempotency_key` | 같은 서비스가 같은 키로 다시 요청하면 새로 실행하지 않고 처음 request_id를 돌려줌. 네트워크 오류로 다시 보낼 때 | – |
+| `subscribe` | `"30m"`처럼 기간을 주면, 그동안 결과가 기대는 source가 `invalidate()`될 때마다 다시 계산해 다시 배달. `True`면 만료 없음. [구독](#구독-subscribe) | – |
 
 `meta`가 cache key가 아니므로, 두 사용자가 같은 질문을 하면 **계산은 한 번, 결과는 각자의 `meta`와 함께 따로** 배달됩니다.
 
@@ -143,6 +145,7 @@ def on_stats_failed(status: str, meta: dict, error: str | None):
 | `request_id` | ○ | ○ | `order()`가 돌려준 값 |
 | `meta` | ○ | ○ | `order()`에 준 `meta` (없으면 `{}`) |
 | `error` | – | ○ | 실패 원인의 마지막 줄 (없으면 `None`) |
+| `refresh` | ○ | ○ | 구독: `0`은 처음 배달, `1`, `2`, …는 source가 바뀌어 다시 배달한 것 |
 
 선언하지 않은 인자는 넣지 않으므로 기존 delivery Action은 그대로 동작합니다. 계산하는 Action(produce)은 `meta`를 받지 않습니다. cache key에 없는 값이 결과를 바꾸면 cache가 틀어지기 때문입니다.
 - 요청한 서비스의 이름은 `order()`를 부른 파일로 자동으로 정해집니다. 인자로 적지 않으며, 다른 서비스인 척할 수 없습니다.
@@ -217,6 +220,42 @@ def who() -> dict:
 - 반환 키는 `iam.yaml`의 계층 이름과 맞아야 합니다. 규칙이 쓰는 계층이 빠져 있으면 `start()` 때 등록이 거부됩니다.
 - 엔진은 이 값을 **그대로 믿습니다.** 값을 어떻게 얻고 검증할지는 서비스(인증 시스템)의 몫입니다.
 - 계층이 서비스뿐이라면 필요 없습니다.
+
+## 구독 (subscribe)
+
+결과를 한 번 받고 끝내지 않고, **그 결과가 기대는 데이터가 바뀌면 다시 받습니다.** 챗봇 대화창처럼 열려 있는 동안 최신 답을 유지할 때 씁니다.
+
+```python
+@service("chatbot")
+def ask(session_id: str, q: str) -> str:
+    return order("search_result", params={"q": q}, meta={"session_id": session_id}, subscribe="30m")
+
+@action(inputs=["result"])
+def on_search_result(result: str, meta: dict, refresh: int):
+    send_to_user(meta["session_id"], result if refresh == 0 else f"(갱신) {result}")
+```
+
+- 30분 동안 결과가 기대는 source(검색, 문서 등) 중 하나가 `invalidate()`되면, 엔진이 **같은 params와 meta로 다시 계산해 같은 배달 Action으로** 보냅니다.
+  request_id도 처음 것 그대로라 서비스가 새로 짝을 맞출 필요가 없습니다. 몇 번째인지는 `refresh`로 압니다.
+- 바뀐 단계와 그 하위 단계만 다시 계산합니다(나머지는 cache).
+- **다시 계산한 결과가 지난번과 같으면 보내지 않습니다.** 사용자에게 같은 답이 반복되지 않습니다.
+- 변경이 몰려도 한 구독에 refresh는 한 번에 하나이고, 최소 간격(`msdf up --refresh-min-gap`, 기본 1초)을 둡니다. refresh 도중에 또 바뀌면 끝난 뒤 한 번 더 합니다.
+- refresh마다 IAM을 다시 검사합니다. 권한이 없어졌으면 구독을 끝내고 `on_fail`에 `status="cancelled"`와 이유(`error`)를 보냅니다.
+- 끝나는 때: 기간 만료, `cancel(request_id)`, 권한이 없어짐, DAG가 바뀌어 같은 요청을 만들 수 없음. `subscribe=True`(만료 없음)는 `msdf up --max-subscriptions`(기본 1000) 안에서만 됩니다.
+- MSDF는 source를 직접 확인하지 않습니다. 바뀌었다는 신호는 데이터를 읽는 서비스의 `invalidate()`뿐입니다.
+
+## `cancel()`
+
+```python
+request_id = order("search_result", params={"q": q}, subscribe="30m")
+# 사용자가 질문을 바꾸거나 대화창을 닫으면
+cancel(request_id)
+```
+
+- 이 서비스가 낸 요청만 취소할 수 있습니다.
+- 진행 중이면 멈추고 `on_fail`에 `status="cancelled"`가 갑니다. 다른 요청이 함께 기다리는 단계는 계속 돕니다.
+- 구독이면 구독도 끝냅니다. 이미 끝난 요청의 구독만 끝낼 때는 배달하지 않습니다.
+- 무엇인가를 멈췄거나 끝냈으면 `True`. 운영자는 `msdf cancel REQUEST_ID`나 웹 UI의 실행 상세에서 같은 일을 합니다.
 
 ## `invalidate()`
 

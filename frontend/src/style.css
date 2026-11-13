@@ -156,7 +156,9 @@ label.field input, label.field select { color: var(--text); font-size: 14px; }
 .s-running, .s-leased, .s-saved { color: var(--run); background: var(--run-soft); }
 .s-queued { color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); }
 .s-cancelled { color: var(--cancel); background: var(--panel-2); }
-.s-cached { color: var(--cache); background: var(--cache-soft); }
+.s-cached, .s-skipped { color: var(--cache); background: var(--cache-soft); }
+.s-active { color: var(--accent); background: var(--accent-soft); }
+.s-ended { color: var(--cancel); background: var(--panel-2); }
 
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line-2); vertical-align: top; }

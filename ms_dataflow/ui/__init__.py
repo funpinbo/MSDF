@@ -301,7 +301,11 @@ def install(sched: Scheduler, *, pages: bool = True) -> None:
                 steps.sort(key=lambda s: s["step_no"])
                 order = run[0]["order_name"]
                 dag = dag_json(sched, order) if order in sched.project.dags else None
-                return {"run": run[0], "steps": steps, "dag": dag}
+                sid = run[0].get("subscription_id")
+                sub = next(
+                    (s for s in sched.engine.subscriptions() if s["request_id"] == sid), None
+                )
+                return {"run": run[0], "steps": steps, "dag": dag, "subscription": sub}
 
             out = await sched.db(q)
             if out is None:
@@ -379,6 +383,11 @@ def install(sched: Scheduler, *, pages: bool = True) -> None:
                 media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
+
+        # --- 구독 -------------------------------------------------------------
+        @app.get("/api/subscriptions")
+        async def api_subscriptions(status: str | None = None) -> list[dict[str, Any]]:
+            return await sched.db(sched.engine.subscriptions, status)
 
         # --- 실행 취소 ---------------------------------------------------------
         @app.post("/api/runs/{run_id}/cancel")

@@ -46,6 +46,9 @@ uv run python chatbot.py        # terminal 5 — type questions (an empty line e
 
 The web UI appears only after it is built once at the repository root: `cd frontend && npm install && npm run build`.
 
+After asking a question, edit an answer in `sample_docs.json` (e.g. change "7일" to "14일") and save. `search.py` notices the change and calls `invalidate()`,
+and the open chat receives an `(갱신)` (updated) answer again (the chatbot asks with `subscribe="10m"`). Answers to other questions did not change, so they are not sent again.
+
 ## Files
 
 | File | Contents |

@@ -72,7 +72,7 @@ def test_version_ignores_formatting():
     assert ids.version_of_source(a) == ids.version_of_source(b)
 
 
-SCHEMA_GOLDEN = {4: "ade493a2b6e98d26"}
+SCHEMA_GOLDEN = {4: "ade493a2b6e98d26", 5: "f62d19bc57310577"}
 
 
 def test_schema_changes_come_with_a_migration():
