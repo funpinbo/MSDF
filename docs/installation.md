@@ -81,23 +81,23 @@ pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git"
 특정 버전에 고정하려면 태그나 커밋을 붙입니다.
 
 ```bash
-pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.2.0"
+pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.3.0"
 ```
 
 의존성 파일에 적을 때:
 
 ```text
 # requirements.txt
-msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.2.0
+msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.3.0
 ```
 
 ```toml
 # pyproject.toml
 [project]
-dependencies = ["msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.2.0"]
+dependencies = ["msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.3.0"]
 ```
 
-uv라면 `uv add "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git" --tag v0.2.0`.
+uv라면 `uv add "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git" --tag v0.3.0`.
 
 **git 주소로 설치하면 웹 UI 빌드 결과는 들어 있지 않습니다**(저장소에 빌드 결과를 넣지 않기 때문입니다). 이렇게 설치한 곳에서 엔진을 띄우고 UI도 쓰려면,
 저장소를 받아 UI를 한 번 빌드한 뒤 그 폴더를 알려 줍니다.
@@ -117,13 +117,13 @@ UI 없이 엔진만 띄워도 실행에는 문제가 없습니다. `/ui`에 빌�
 cd MSDF
 (cd frontend && npm install && npm run build)
 uv build --wheel                   # 또는: pip install build && python -m build --wheel
-ls dist/                           # msdf-0.2.0-py3-none-any.whl
+ls dist/                           # msdf-0.3.0-py3-none-any.whl
 ```
 
 옮긴 곳에서:
 
 ```bash
-pip install "msdf-0.2.0-py3-none-any.whl[server]"
+pip install "msdf-0.3.0-py3-none-any.whl[server]"
 ```
 
 > 휠에는 UI가 쓰는 라이브러리의 빌드된 코드가 들어갑니다: Vue, vue-router, Vue Flow(안에 VueUse 포함), dagre는 MIT,

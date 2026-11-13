@@ -41,6 +41,9 @@ MSDF is **a layer that makes permissions, failures and tracing easy for data mov
 | **DAG** | A YAML file describing how to produce one result: steps, connections, the result slot, and where to deliver it. |
 | **Artifact** | Data that is stored and crosses a service boundary. Once created, it never changes. |
 | **Delivery** | Result notification. On success it wakes the `on_success` Action; on final failure, the `on_fail` Action. |
+| **request_id** | The ID of one request. `order()` returns it and deliveries receive the same value. It differs per request even for the same data. |
+| **meta** | A small value attached to a request and handed back with the result (e.g. a session_id). Not used for computing (not in the cache key). |
+| **data_version** | The version of source data. When the service that reads it changes it with `invalidate()`, computation restarts from that step. |
 
 ### What counts as an Artifact
 
@@ -50,12 +53,12 @@ Values used and discarded inside one service, and external input such as user in
 ## How one request is processed
 
 ```text
-1. order        app calls order("daily_stats", params={"day": ...}) → returns immediately
+1. order        app calls order("daily_stats", params={"day": ...}, meta=...) → gets a request_id and returns immediately
 2. permissions  check the request itself and every connection in the DAG against the IAM rules. If any is blocked, the whole request is denied
 3. cache        if a result for the same request already exists and has not expired, use it
 4. plan         walk back from the result and pick only the steps that actually need computing
 5. execute      each service process runs its steps one at a time and stores the results
-6. deliver      wake app's on_success (or on_fail)
+6. deliver      wake app's on_success (or on_fail), with the request_id and meta
 ```
 
 Your service code only provides the functions for steps 1 and 6. The engine handles the rest.

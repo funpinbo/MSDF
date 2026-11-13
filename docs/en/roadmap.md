@@ -2,7 +2,7 @@
 
 [한국어](../roadmap.md) | **English**
 
-## Current status: 0.2.0
+## Current status: 0.3.0
 
 Runs on one machine as an engine (`msdf up`) plus several service processes.
 
@@ -23,6 +23,8 @@ Runs on one machine as an engine (`msdf up`) plus several service processes.
 | 13 | Token authentication for engine, services and UI (`--token`, `MSDF_TOKEN`) | done (0.2) |
 | 14 | Live UI updates (SSE), IAM editing page, run cancellation | done (0.2) |
 | 15 | Automatic DB migration, code analysis cache, `msdf init/status/runs/cancel` | done (0.2) |
+| 16 | Request correlation: `request_id`, `meta`, `idempotency_key`, `error` for `on_fail` | done (0.3) |
+| 17 | Data change step 1: `invalidate()`, `data_version`, `msdf invalidate` | done (0.3) |
 
 ## Direction
 
@@ -39,17 +41,24 @@ The principles that follow from it:
 
 ## What comes next
 
+The center of 0.4 is **data change step 2 (subscribe)**. The design is settled: refreshes are delivered with the original request_id, and an
+unchanged result is not delivered again.
+
 | Item | Contents |
 | --- | --- |
+| **subscribe** (0.4) | `order(..., subscribe="30m")`. When a source the result depends on is `invalidate()`d, recompute with the same params and meta and deliver again. Debounce, IAM re-check, expiry |
+| Subscription page (0.4) | subscriptions list, refresh marks and invalidation history in the UI |
+| Slot type check | check at load time that the type hints of output and input slots connected by a DAG match |
+| Cancelling from service code | `cancel(request_id)`: drop the previous request when the user changes the question |
 | English messages and UI | CLI output, error messages and the web UI are in Korean today |
+| Reusing memory between consecutive steps in the same service | skip re-reading an output that was just saved, to cut interactive latency. Decide after measuring |
 | Large data and streaming | `ctx.load()`, `ctx.save()` for reading and writing storage directly inside an Action |
-| Reusing memory between consecutive steps in the same service | skip re-reading an output that was just saved. Decide after measuring |
-| Isolating user Actions | an option to run Actions in a subprocess |
-| Force-stopping a running step | today a step already running in a service runs to the end after cancellation (its result is discarded) |
-| Cancelling from service code | a `cancel()` that cancels an in-flight request by the key `order()` returned |
-| PyPI release | today install from the repository or a git URL ([Installation](installation.md)). A release will ship the UI build in the wheel together with license notices |
-| Built-in PostgreSQL Resolver | can be plugged in today through an entry point |
+| Force-stopping a running step, isolating user Actions | an option to run Actions in a subprocess |
+| Trace export | lineage and step timings to OpenTelemetry |
+| PyPI release, built-in PostgreSQL and S3 Resolvers | local first, then these |
 | Multiple users and roles | today there is one token for the whole engine |
+
+Not planned: periodic runs (cron), deploying or scaling services, LLM-specific features, code inside DAGs.
 
 ## Known limitations
 

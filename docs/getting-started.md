@@ -235,6 +235,8 @@ python app.py            # 터미널 4
 - **같은 날짜로 다시 요청하면** 세 단계를 다시 하지 않고 저장된 결과를 바로 돌려줍니다(`load`는 1시간 동안).
 - `summarize` 함수의 로직을 고치고 `transform.py`를 다시 띄우면, `load`와 `clean` 결과는 재사용하고 `summarize`부터 다시 계산합니다. 주석이나 공백만 바꾼 것은 로직 변경으로 보지 않습니다.
 - 실행 중에 `transform.py`를 죽이고 다시 띄우면, 하던 단계가 다시 배정되어 이어집니다.
+- 원천 데이터가 바뀌었다고 알려 보세요: `msdf invalidate source.load --param day='"2026-11-12"'`(또는 `source.py` 안에서 `invalidate("load", params={"day": ...})`).
+  다음 요청에서 `load`, `clean`, `summarize`가 다시 계산됩니다.
 
 ### 권한 붙이기 (선택)
 

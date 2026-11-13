@@ -2,7 +2,7 @@
 
 **한국어** | [English](en/roadmap.md)
 
-## 현재 상태: 0.2.0
+## 현재 상태: 0.3.0
 
 한 머신에서 엔진(`msdf up`)과 여러 서비스 프로세스로 동작합니다.
 
@@ -23,6 +23,8 @@
 | 13 | 엔진·서비스·UI 토큰 인증 (`--token`, `MSDF_TOKEN`) | 완료 (0.2) |
 | 14 | UI 실시간 갱신(SSE), IAM 편집 화면, 실행 취소 | 완료 (0.2) |
 | 15 | DB 자동 변환, 코드 분석 캐시, `msdf init/status/runs/cancel` | 완료 (0.2) |
+| 16 | Request correlation: `request_id`, `meta`, `idempotency_key`, `on_fail`의 `error` | 완료 (0.3) |
+| 17 | Data change 1단계: `invalidate()`, `data_version`, `msdf invalidate` | 완료 (0.3) |
 
 ## 방향
 
@@ -39,17 +41,23 @@ MSDF가 지키려는 것은 한 문장입니다.
 
 ## 다음에 할 것
 
+0.4의 중심은 **data change 2단계(subscribe)** 입니다. 설계는 정했습니다: refresh도 원래 request_id로 배달, 결과가 같으면 다시 배달하지 않음.
+
 | 항목 | 내용 |
 | --- | --- |
+| **subscribe** (0.4) | `order(..., subscribe="30m")`. 결과가 기대는 source가 `invalidate()`되면 같은 params·meta로 다시 계산해 다시 배달. debounce, IAM 재검사, 만료 |
+| 구독 화면 (0.4) | UI에 구독 목록, refresh 표시, invalidate 이력 |
+| 슬롯 타입 검사 | DAG로 잇는 출력·입력 슬롯의 타입 힌트가 맞는지 로딩할 때 검사 |
+| 서비스 코드에서 취소 | `cancel(request_id)`. 사용자가 질문을 바꾸면 이전 요청을 끊기 |
 | 영어 메시지와 UI | 지금은 CLI 출력, 오류 메시지, 웹 UI가 한국어다 |
+| 같은 서비스에서 이어지는 단계의 메모리 재사용 | 방금 저장한 출력을 다시 읽지 않기. 실시간 응답 지연을 줄인다. 측정 후 결정 |
 | 큰 데이터·스트리밍 | Action 안에서 저장소를 직접 읽고 쓰는 `ctx.load()`, `ctx.save()` |
-| 같은 서비스에서 이어지는 단계의 메모리 재사용 | 방금 저장한 출력을 다시 읽지 않기. 측정 후 결정 |
-| 사용자 Action 격리 | Action을 서브프로세스에서 실행하는 옵션 |
-| 실행 중 단계 강제 중단 | 지금은 취소해도 서비스에서 돌던 단계는 끝까지 돈다(결과는 버림) |
-| 서비스 코드에서 취소 | `order()`가 돌려준 키로 진행 중인 요청을 취소하는 `cancel()` |
-| PyPI 배포 | 지금은 저장소나 git 주소로 설치한다([설치](installation.md)). 배포할 때는 휠에 UI 빌드와 라이선스 고지를 함께 넣는다 |
-| 내장 PostgreSQL Resolver | 지금은 entry point로 직접 붙일 수 있음 |
+| 실행 중 단계 강제 중단, 사용자 Action 격리 | 서브프로세스 실행 옵션 |
+| 추적 내보내기 | 계보와 단계 시간을 OpenTelemetry로 |
+| PyPI 배포, 내장 PostgreSQL · S3 Resolver | 로컬에서 먼저, 그다음 |
 | 여러 사용자·역할 | 지금 토큰은 하나(엔진 전체 공용)다 |
+
+하지 않을 것: 주기 실행(cron), 서비스 배포·스케일링, LLM 전용 기능, DAG 안에 코드 넣기.
 
 ## 알려진 한계
 

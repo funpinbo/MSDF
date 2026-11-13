@@ -13,7 +13,7 @@ MSA 환경에서 **서비스끼리 서로를 몰라도 데이터를 주고받게
 결과를 어디에 두고 실패하면 어떻게 할지"까지 떠안게 됩니다. 게다가 챗봇은 데이터를 많이 바꿉니다. MSDF는 이 지휘 역할을 기능 밖으로 꺼내,
 기능들이 서로를 모른 채 데이터 변화에 따라 움직이게 합니다. 그래서 기능을 더하거나 뺄 때 DAG만 고치면 됩니다. → [만든 이유](docs/background.md)
 
-> 현재 버전 **0.2.0**: 한 머신에서 엔진과 여러 서비스 프로세스로 동작합니다. 아직 PyPI에는 없으며 [저장소나 git 주소로 설치](docs/installation.md)합니다.
+> 현재 버전 **0.3.0**: 한 머신에서 엔진과 여러 서비스 프로세스로 동작합니다. 아직 PyPI에는 없으며 [저장소나 git 주소로 설치](docs/installation.md)합니다.
 > 바뀐 점은 [변경 기록](CHANGELOG.md), 남은 일은 [로드맵](docs/roadmap.md)에 있습니다.
 
 ## 빠르게 돌려 보기
@@ -34,20 +34,21 @@ uv run python run_local.py "환불은 언제 되나요" "환불은 언제 되나
 from ms_dataflow import action, order, service, start
 
 @service("app")
-def app(day: str):
-    order("daily_stats", params={"day": day})   # 즉시 반환, 결과를 기다리지 않는다
+def app(day: str, user: str):
+    # 즉시 반환, 결과를 기다리지 않는다. 돌려받을 곳(user)은 meta로 — 계산(cache key)에는 쓰이지 않는다
+    order("daily_stats", params={"day": day}, meta={"user": user})
 
 @action(inputs=["stats"])
-def on_stats(stats):                             # DAG의 on_success가 가리킨다
-    print("결과:", stats)
+def on_stats(stats, meta):                       # DAG의 on_success가 가리킨다
+    print(meta["user"], "에게:", stats)
 
 @action
-def on_stats_failed(status: str):                # DAG의 on_fail이 가리킨다 ("failed" | "cancelled")
-    print("실패:", status)
+def on_stats_failed(status: str, meta, error):   # DAG의 on_fail이 가리킨다 ("failed" | "cancelled")
+    print(meta["user"], "에게 실패:", status, error)
 
 if __name__ == "__main__":
     start()        # 엔진에 붙는다 (바로 반환)
-    app("2026-11-12")
+    app("2026-11-12", "alice")
 ```
 
 ```python
@@ -64,6 +65,11 @@ def summarize(rows): return {"count": len(rows), "total": sum(r["value"] for r i
 
 if __name__ == "__main__":
     start(block=True)   # Action만 제공하는 서비스는 Ctrl+C까지 기다린다
+```
+
+```python
+# source.py — 원천 데이터가 바뀌면 그 데이터를 읽는 서비스가 알린다 (누가 기대는지는 모른다)
+invalidate("load", params={"day": "2026-11-12"})   # 다음 요청부터 load와 그 하위 단계만 새로 계산
 ```
 
 ```yaml
@@ -100,6 +106,8 @@ python app.py
 4. **권한을 한 곳에서 관리한다.** IAM 규칙 파일 하나가 모든 흐름을 검사한다.
 5. **같은 요청은 다시 계산하지 않는다.** 로직을 고치면 그 단계부터만 다시 계산한다.
 6. **실패한 곳부터 다시 시작한다.** 단계별로 저장되어 있고, 죽은 Worker의 일은 다른 인스턴스가 이어받는다.
+7. **결과가 요청한 사람에게 정확히 간다.** `order()`는 request_id를, delivery는 `meta`(예: session_id)를 돌려준다. 같은 질문을 여러 사용자가 해도 계산은 한 번, 답은 각자에게.
+8. **데이터가 바뀌면 바뀐 곳부터 다시 계산한다.** 데이터를 읽는 서비스가 `invalidate()`로 알리면, 그 단계와 하위 단계만 새로 계산한다.
 
 ## 무엇을 하지 않나
 
@@ -133,10 +141,11 @@ python app.py
 | [설치](docs/installation.md) | PyPI 없이 설치하는 세 가지 방법 (저장소, git 주소, 휠) |
 | [시작하기](docs/getting-started.md) | 예제를 5분 만에 돌리고, 내 프로젝트에 붙이기 |
 | [핵심 개념](docs/concepts.md) | Service, Action, Order, DAG, Artifact와 캐시·실패 처리 |
-| [서비스 작성하기](docs/writing-services.md) | `service`, `action`, `order`, `start`, `context`, `delete` 사용법 |
+| [서비스 작성하기](docs/writing-services.md) | `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate` 사용법 |
 | [설정 파일](docs/configuration.md) | DAG, IAM, resolvers YAML 문법, 로딩 검증, `msdf` 명령 |
 | [내부 동작](docs/how-it-works.md) | 프로세스 구조, 단계 실행, 실패 처리, 보관과 삭제 |
 | [로드맵](docs/roadmap.md) | 현재 상태, 방향, 다음에 할 것 |
+| [변경 기록](CHANGELOG.md) | 버전마다 바뀐 것 |
 
 예제: [`examples/chatbot`](examples/chatbot) — 서비스 넷을 LLM 없이 예시 문서로 연결한다.
 

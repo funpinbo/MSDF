@@ -5,7 +5,7 @@
 MSDF (Micro Service Data Flow) is a Python framework that lets microservices exchange data **without knowing about each other**.
 A service only asks for a result by name ("I need this"); which services produce it, and in what order, is decided by a configuration file (a DAG).
 
-> Current version: **0.2.0**. Runs on one machine as an engine plus several service processes. Not on PyPI yet ([Installation](installation.md)).
+> Current version: **0.3.0**. Runs on one machine as an engine plus several service processes. Not on PyPI yet ([Installation](installation.md)).
 > What is done and what is left is in the [roadmap](roadmap.md).
 >
 > CLI output, error messages and the web UI are currently in Korean.
@@ -18,7 +18,7 @@ A service only asks for a result by name ("I need this"); which services produce
 | 0 | [Installation](installation.md) | Installing without PyPI: repository, git URL, wheel file |
 | 1 | [Getting started](getting-started.md) | Run the example in 5 minutes, then attach MSDF to your project |
 | 2 | [Concepts](concepts.md) | What Service, Action, Order, DAG and Artifact mean |
-| 3 | [Writing services](writing-services.md) | How to use `service`, `action`, `order`, `start`, `context`, `delete` |
+| 3 | [Writing services](writing-services.md) | How to use `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate` |
 | 4 | [Configuration](configuration.md) | The three YAML files (DAG, IAM, resolvers) and the `msdf` command |
 | 5 | [How it works](how-it-works.md) | How the engine processes a request, and what happens on failure |
 | 6 | [Roadmap](roadmap.md) | How far it has come and where it is heading |
@@ -30,12 +30,12 @@ A service only asks for a result by name ("I need this"); which services produce
 from ms_dataflow import action, order, service
 
 @service("app")
-def app(day: str):
-    order("daily_stats", params={"day": day})   # returns immediately
+def app(day: str, user: str):
+    order("daily_stats", params={"day": day}, meta={"user": user})   # returns immediately with a request_id
 
 @action(inputs=["stats"])
-def on_stats(stats):                             # woken up when the result arrives
-    print("result:", stats)
+def on_stats(stats, meta):                       # woken up when the result arrives; meta says whose request it was
+    print("to", meta["user"], ":", stats)
 
 @action
 def on_stats_failed(status: str):                # woken up on final failure

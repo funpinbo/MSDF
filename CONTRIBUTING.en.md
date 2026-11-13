@@ -2,7 +2,7 @@
 
 [한국어](CONTRIBUTING.md) | **English**
 
-Current version: **0.2.0.** What comes next is listed under "What comes next" in [docs/en/roadmap.md](docs/en/roadmap.md).
+Current version: **0.3.0.** What comes next is listed under "What comes next" in [docs/en/roadmap.md](docs/en/roadmap.md).
 
 ## Getting started
 

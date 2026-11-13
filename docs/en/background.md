@@ -46,6 +46,10 @@ Adding or removing a feature leaves the other services' code untouched; only the
 
 **Move on data changes.** The unit of flow is data (an Artifact), not a task. Because every piece of data records where it came from and which code
 (version) produced it, only what changed is recomputed and unchanged results are reused.
+When source data changes, the service that reads it only has to call `invalidate()`; the engine works out from lineage who depends on it.
+
+**Give results back to exactly who asked.** So that answers never mix when many users ask at once, every request gets its `request_id` and
+`meta` (e.g. a session_id) back with the result. The same question is still computed only once.
 
 **Permissions, failures and tracing in one place.** However many features there are, "who may receive this data", "where did it fail" and
 "where did this result come from" are answered in one place.

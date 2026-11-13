@@ -14,7 +14,7 @@ the chatbot ends up owning "what to call, in which order, where to keep the resu
 a lot of data. MSDF moves that conductor role out of the features, so they run on data changes without knowing about each other.
 Adding or removing a feature then means editing only the DAG. → [Why MSDF](docs/en/background.md)
 
-> Current version **0.2.0**: runs on one machine as an engine plus several service processes. It is not on PyPI yet;
+> Current version **0.3.0**: runs on one machine as an engine plus several service processes. It is not on PyPI yet;
 > [install it from the repository or a git URL](docs/en/installation.md). What changed is in the [changelog](CHANGELOG.en.md); remaining work is in the [roadmap](docs/en/roadmap.md).
 >
 > CLI output, error messages and the web UI are currently in Korean. The bundled example uses Korean sample data.
@@ -38,20 +38,21 @@ see [Getting started](docs/en/getting-started.md).
 from ms_dataflow import action, order, service, start
 
 @service("app")
-def app(day: str):
-    order("daily_stats", params={"day": day})   # returns immediately, does not wait for the result
+def app(day: str, user: str):
+    # returns immediately. Who gets the result (user) goes in meta; it is not used for computing (cache key)
+    order("daily_stats", params={"day": day}, meta={"user": user})
 
 @action(inputs=["stats"])
-def on_stats(stats):                             # the DAG's on_success points here
-    print("result:", stats)
+def on_stats(stats, meta):                       # the DAG's on_success points here
+    print("to", meta["user"], ":", stats)
 
 @action
-def on_stats_failed(status: str):                # the DAG's on_fail points here ("failed" | "cancelled")
-    print("failed:", status)
+def on_stats_failed(status: str, meta, error):   # the DAG's on_fail points here ("failed" | "cancelled")
+    print("to", meta["user"], ": failed", status, error)
 
 if __name__ == "__main__":
     start()        # attaches to the engine (returns immediately)
-    app("2026-11-12")
+    app("2026-11-12", "alice")
 ```
 
 ```python
@@ -68,6 +69,11 @@ def summarize(rows): return {"count": len(rows), "total": sum(r["value"] for r i
 
 if __name__ == "__main__":
     start(block=True)   # a service that only provides Actions waits until Ctrl+C
+```
+
+```python
+# source.py — when source data changes, the service that reads it announces it (it does not know who depends on it)
+invalidate("load", params={"day": "2026-11-12"})   # from the next request, only load and its downstream steps recompute
 ```
 
 ```yaml
@@ -104,6 +110,8 @@ Data IDs, cache keys, queues, leases and serialization are handled by the engine
 4. **Permissions in one place.** One IAM rule file checks every flow.
 5. **The same request is never recomputed.** Change the logic and only that step onward is recomputed.
 6. **Restart from where it failed.** Each step is stored, and work from a dead Worker is picked up by another instance.
+7. **Results reach exactly who asked.** `order()` returns a request_id and deliveries get back your `meta` (e.g. a session_id). Many users asking the same question: computed once, answered to each.
+8. **When data changes, recompute from where it changed.** When the service that reads the data calls `invalidate()`, only that step and its downstream steps are recomputed.
 
 ## What it does not do
 
@@ -137,10 +145,11 @@ Data itself moves only between service processes and storage. The engine only sa
 | [Installation](docs/en/installation.md) | Three ways to install without PyPI (repository, git URL, wheel) |
 | [Getting started](docs/en/getting-started.md) | Run the example in 5 minutes, then attach MSDF to your project |
 | [Concepts](docs/en/concepts.md) | Service, Action, Order, DAG, Artifact, caching and failure handling |
-| [Writing services](docs/en/writing-services.md) | How to use `service`, `action`, `order`, `start`, `context`, `delete` |
+| [Writing services](docs/en/writing-services.md) | How to use `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate` |
 | [Configuration](docs/en/configuration.md) | DAG, IAM and resolvers YAML, load-time validation, the `msdf` command |
 | [How it works](docs/en/how-it-works.md) | Processes, step execution, failure handling, retention and deletion |
 | [Roadmap](docs/en/roadmap.md) | Current status, direction, what comes next |
+| [Changelog](CHANGELOG.en.md) | What changed in each version |
 
 Example: [`examples/chatbot`](examples/chatbot/README.en.md) — four services wired together with sample documents, no LLM.
 

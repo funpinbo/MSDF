@@ -242,6 +242,8 @@ If the engine runs on another address, tell the services with `start("http://hos
 - Change the logic of `summarize` and restart `transform.py`: the results of `load` and `clean` are reused and computation restarts at `summarize`.
   Changing only comments or whitespace is not treated as a logic change.
 - Kill `transform.py` mid-run and start it again: the step it was running is reassigned and continues.
+- Announce that the source data changed: `msdf invalidate source.load --param day='"2026-11-12"'` (or `invalidate("load", params={"day": ...})` inside `source.py`).
+  The next request recomputes `load`, `clean` and `summarize`.
 
 ### Add permissions (optional)
 
