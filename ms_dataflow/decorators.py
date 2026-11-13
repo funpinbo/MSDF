@@ -205,6 +205,14 @@ class OrderBackend(Protocol):
 
     def delete(self, key: str, cascade: bool, caller_file: str) -> dict[str, Any]: ...
 
+    def invalidate(
+        self,
+        action: str,
+        params: dict[str, Any] | None,
+        data_version: str | None,
+        caller_file: str,
+    ) -> dict[str, Any]: ...
+
 
 _BACKEND: list[OrderBackend] = []
 
@@ -255,6 +263,25 @@ def delete(key: str, *, cascade: bool = False) -> int:
         raise OrderError("엔진에 연결되지 않았습니다. 서비스 시작 시 start()를 먼저 호출하세요.")
     caller = _realpath(sys._getframe(1).f_code.co_filename)
     return len(_BACKEND[0].delete(key, cascade, caller)["deleted"])
+
+
+def invalidate(
+    action: str, params: dict[str, Any] | None = None, *, data_version: str | None = None
+) -> str:
+    """이 서비스의 Action이 읽는 source 데이터가 바뀌었다고 알린다. 새 data_version을 돌려준다.
+
+    - 다음 요청부터 그 Action과, 그 결과에 기대는 모든 하위 단계가 새로 계산된다(cache key가 바뀜).
+      누가 이 데이터에 기대는지는 몰라도 된다. 엔진이 계보로 판단한다.
+    - params를 주면 그 params로 만든 것만, 빼면 그 Action이 만든 것 전부.
+    - data_version(예: ETag, 갱신 시각)을 주면 그 값을 버전으로 쓴다. 예전 값으로 돌아가면
+      예전 cache를 다시 쓴다.
+    - 자기 서비스의 Action만 지정할 수 있다.
+    """
+    if not _BACKEND:
+        raise OrderError("엔진에 연결되지 않았습니다. 서비스 시작 시 start()를 먼저 호출하세요.")
+    caller = _realpath(sys._getframe(1).f_code.co_filename)
+    out = _BACKEND[0].invalidate(action, dict(params) if params else None, data_version, caller)
+    return str(out["version"])
 
 
 # --- 실행 시점에 함수 찾기 ---------------------------------------------------

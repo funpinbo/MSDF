@@ -89,7 +89,7 @@ python transform.py
 python app.py
 ```
 
-사용자가 쓰는 것은 `service`, `action`, `order`, `start`, `context`, `delete` 여섯 개와 YAML 세 개가 전부입니다.
+사용자가 쓰는 것은 `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate` 일곱 개와 YAML 세 개가 전부입니다.
 데이터 ID, 캐시 키, 큐, lease, 직렬화는 엔진이 처리하며 사용자 코드에 나오지 않습니다.
 
 ## 무엇이 좋아지나

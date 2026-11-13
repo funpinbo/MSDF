@@ -257,6 +257,14 @@ class ResultReport(Frozen):
     result: StepResult
 
 
+class InvalidateRequest(Frozen):
+    instance_id: str
+    requester: str  # 자기 서비스의 Action만 무효로 할 수 있다
+    action: str
+    params: dict[str, JsonValue] | None = None
+    data_version: str | None = None
+
+
 class DeleteRequest(Frozen):
     instance_id: str
     requester: str

@@ -36,20 +36,30 @@ def step_key(
     version: str,
     inputs: Mapping[str, str],
     params: Mapping[str, Any] | None = None,
+    data_version: str | None = None,
 ) -> str:
     """생산 단계의 정체.
 
     입력은 슬롯 이름을 키로 한 매핑으로 해시하므로 나열 순서와 무관하고,
     같은 artifact가 다른 슬롯에 들어가면 다른 키가 된다. params는 루트 단계에만 준다.
     """
-    return _digest(
-        "step",
+    parts = [
         service,
         action,
         version,
         canonical_json(dict(inputs)),
         canonical_json(dict(params) if params else {}),
-    )
+    ]
+    if data_version is not None:  # invalidate()된 적이 없으면 0.2와 같은 키
+        parts.append("data_version=" + data_version)
+    return _digest("step", *parts)
+
+
+def params_scope(params: Mapping[str, Any] | None) -> str:
+    """invalidate()의 범위 키. params가 없으면 '*' (Action 전체)."""
+    if not params:
+        return "*"
+    return _digest("scope", canonical_json(dict(params)))
 
 
 def lineage_key(step: str, slot: str) -> str:

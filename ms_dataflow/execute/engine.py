@@ -119,6 +119,54 @@ class Engine:
             return {s: slots[s][0] for s in outputs}
         return None
 
+    def source_version(self, service: str, action: str, params: dict[str, Any]) -> str | None:
+        """invalidate()로 알린 버전. Action 전체('*')와 그 params 범위를 합친다."""
+        scope = ids.params_scope(params)
+        rows = self.store.query(
+            "SELECT scope, version FROM source_version WHERE service = ? AND action = ? "
+            "AND scope IN ('*', ?)",
+            (service, action, scope),
+        )
+        if not rows:
+            return None
+        by = {r["scope"]: r["version"] for r in rows}
+        return "|".join(f"{s}={by[s]}" for s in sorted(by))
+
+    def invalidate(
+        self,
+        service: str,
+        action: str,
+        params: dict[str, Any] | None = None,
+        data_version: str | None = None,
+        now: float | None = None,
+    ) -> dict[str, Any]:
+        """source 데이터가 바뀌었다고 기록한다. 다음 계획부터 그 단계와 하위 단계가 새로 계산된다.
+
+        진행 중인 단계는 건드리지 않는다. data_version을 주면 그 값을, 없으면 새 값을 쓴다.
+        """
+        spec = self.registry.action(service, action)
+        if spec is None:
+            raise OrderError(f"서비스 '{service}'에 Action '{action}'이 없습니다.")
+        params = dict(params or {})
+        if params and set(params) != set(spec.params):
+            raise OrderError(
+                f"invalidate의 params는 {service}.{action}의 params와 같아야 합니다: "
+                f"{', '.join(spec.params) or '(없음)'} (받은 것: {', '.join(sorted(params))}). "
+                "전부 무효로 하려면 params를 빼세요."
+            )
+        now = self.clock() if now is None else now
+        scope = ids.params_scope(params)
+        version = data_version if data_version is not None else uuid.uuid4().hex[:16]
+        with self.store.tx() as db:
+            db.execute(
+                """INSERT INTO source_version (service, action, scope, params, version, changed_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT (service, action, scope)
+                   DO UPDATE SET version = excluded.version, changed_at = excluded.changed_at""",
+                (service, action, scope, _j(params) if params else None, version, now),
+            )
+        return {"service": service, "action": action, "scope": scope, "version": version}
+
     def inflight(self, step_key: str) -> InFlight | None:
         rows = self.store.query(
             f"""SELECT run_id, step_no, generation, outputs FROM step

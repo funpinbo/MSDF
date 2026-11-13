@@ -70,6 +70,7 @@ What decides whether two requests are the same:
 - the Action's version (a hash of the normalized function source; comments, whitespace, docstrings and decorator options do not affect it)
 - which input data came in through which slot
 - for the first step, the order's params
+- the `data_version` of source data announced with `invalidate()` (none if never announced)
 
 What is **not** used: the requesting account, `retries`, `fresh_for`. So a different account making the same request shares the result
 (permissions are still checked separately).
@@ -80,6 +81,7 @@ What is **not** used: the requesting account, `retries`, `fresh_for`. So a diffe
 | The logic of `summarize` changed | `load` and `clean` results are reused; computation restarts at `summarize` |
 | A different day is requested | Computed from scratch |
 | `load`'s `fresh_for` has passed | Recomputed from `load` |
+| The `source` service announced a change with `invalidate("load")` | Recomputed from `load` (downstream steps follow by themselves, since their inputs changed) |
 | The same request arrives several times at once | Computed once, delivered once per request |
 
 Making the same input produce the same output (idempotency) is the service's responsibility.

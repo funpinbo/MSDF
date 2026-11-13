@@ -217,3 +217,19 @@ def test_meta_and_request_id_over_http(cluster):
     got = [v for e, v in read_log(cluster.root) if e == "on_done"]
     assert {g["meta"]["n"] for g in got} == {2, 3}
     assert all(len(g["id"]) == 16 for g in got)
+
+
+def test_invalidate_over_http_and_cli(cluster, capsys):
+    from ms_dataflow.cli import main
+
+    cluster.service("src")
+    cluster.service("mid")
+    cluster.wait_started("src", "mid")
+    cluster.service("req", TRIGGER="9")
+    wait_for(lambda: ("on_done", {"value": 20}) in read_log(cluster.root))
+    eng = ["--engine", cluster.url]
+    assert main(["invalidate", "src.make", "--param", "n=9", *eng]) == 0
+    assert "data_version" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as e:
+        main(["invalidate", "src.nope", *eng])
+    assert "nope" in str(e.value)

@@ -2,7 +2,7 @@
 
 [한국어](../writing-services.md) | **English**
 
-There are only six things you use.
+There are only seven things you use.
 
 ```python
 from ms_dataflow import service, action, order, start, context, delete
@@ -16,6 +16,7 @@ from ms_dataflow import service, action, order, start, context, delete
 | `start()` | Attaches this process to the engine |
 | `@context` | Marks a function that provides values for permission checks (account and so on) |
 | `delete(request_id)` | Deletes data produced by an `order()` |
+| `invalidate(action, params)` | Announces that the source data your Action reads has changed |
 
 Your service code never contains other services' names, database types, storage locations or data IDs. If it does, something is being used the wrong way.
 
@@ -221,6 +222,31 @@ def who() -> dict:
 - The returned keys must match the layer names in `iam.yaml`. If a layer used by the rules is missing, registration is refused at `start()`.
 - The engine **trusts these values as given.** How they are obtained and verified is up to the service (your authentication system).
 - Not needed if your only layer is the service.
+
+## `invalidate()`
+
+**The service that reads the source data** (an external DB, a web page, a file) announces that it changed.
+
+```python
+service("search")
+
+@action(params=["q"], outputs=["docs"])
+def fetch(q: str) -> list: ...
+
+# from a webhook, CDC, the service's own check, ...
+invalidate("fetch", params={"q": "refund"})       # only what these params produced
+invalidate("fetch")                                # everything fetch produced
+invalidate("fetch", data_version="etag-42")        # give the new version yourself
+```
+
+- From the next request, that Action and **every downstream step that depends on its result are recomputed**: `data_version` is part of the
+  cache key, so downstream input IDs change too. You do not need to know who depends on the data.
+- Only **your own service's Actions** can be named. If another service's data changed, that service announces it.
+- If you pass `data_version`, that value is the version; going back to an old value reuses the old cache. Without it the engine makes a new one.
+- Steps already running are not touched.
+- The cache key of an Action that was never invalidated does not change.
+- Operators and external webhooks do the same with `msdf invalidate search.fetch --param q=refund` or `POST /api/invalidate`.
+- MSDF never checks (polls) sources itself; the service that knows the data decides when it changed. If time is enough, use `fresh_for`.
 
 ## `delete()`
 

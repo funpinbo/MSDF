@@ -32,6 +32,14 @@ class PlanLookup(Protocol):
 
     def inflight(self, step_key: str) -> InFlight | None: ...
 
+    # 선택: invalidate()로 알린 source 데이터 버전. 없으면 None (step_key가 0.2와 같다)
+    # def source_version(self, service: str, action: str, params: dict[str, Any]) -> str | None
+
+
+def _data_version(lookup: Any, service: str, action: str, params: dict[str, Any]) -> str | None:
+    fn = getattr(lookup, "source_version", None)
+    return fn(service, action, params) if fn is not None else None
+
 
 @dataclass
 class PlannedStep:
@@ -58,6 +66,9 @@ class Plan:
     steps: list[PlannedStep] = field(default_factory=list)
     cached: list[str] = field(default_factory=list)  # 캐시로 건너뛴 노드
     joined: list[str] = field(default_factory=list)  # 진행 중 단계에 합류한 노드
+    # 결과가 기대는 (service, action, params scope).
+    # invalidate()가 어느 구독에 닿는지 판단할 때 쓴다
+    sources: list[tuple[str, str, str]] = field(default_factory=list)
 
 
 def plan(
@@ -75,13 +86,18 @@ def plan(
     cached: list[str] = []
     joined: list[str] = []
     local: dict[str, InFlight] = {}  # 같은 plan 안에서 같은 단계가 두 번 나오면 하나로
+    keys: dict[str, str] = {}  # 노드 → step_key
+    sources: list[tuple[str, str, str]] = []
 
     for name in ancestors(dag, rn):  # 부모가 먼저
         node = dag.nodes[name]
         spec = actions[(node.service, node.action)]
         inputs = {slot: produced[parent] for slot, parent in inc.get(name, {}).items()}
         node_params = {p: params[p] for p in spec.params}
-        key = ids.step_key(spec.service, spec.name, spec.version, inputs, node_params or None)
+        dv = _data_version(lookup, spec.service, spec.name, node_params)
+        key = ids.step_key(spec.service, spec.name, spec.version, inputs, node_params or None, dv)
+        keys[name] = key
+        sources.append((spec.service, spec.name, ids.params_scope(node_params)))
         fresh_for = node.fresh_for if node.fresh_for is not None else spec.fresh_for
 
         hit = lookup.fresh(key, spec.outputs, fresh_for, now)
@@ -131,21 +147,14 @@ def plan(
         refs[name] = f"self:{no}"
         local[key] = InFlight(f"self:{no}", now, {s: a for s, (_, a) in outputs.items()})
 
-    result_spec = actions[(dag.nodes[rn].service, dag.nodes[rn].action)]
-    result_key = ids.step_key(
-        result_spec.service,
-        result_spec.name,
-        result_spec.version,
-        {slot: produced[p] for slot, p in inc.get(rn, {}).items()},
-        {p: params[p] for p in result_spec.params} or None,
-    )
     return Plan(
-        result_lineage=ids.lineage_key(result_key, rs),
+        result_lineage=ids.lineage_key(keys[rn], rs),
         result_artifact=produced[(rn, rs)],
         result_ref=refs[rn],
         steps=steps,
         cached=cached,
         joined=joined,
+        sources=sources,
     )
 
 

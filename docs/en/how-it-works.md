@@ -161,5 +161,6 @@ The same information is available as a JSON API.
 | `GET /api/events` | engine log (latest 3000 lines) |
 | `GET /api/artifacts/{artifact_id}` | data lineage (both hot and cold) |
 | `POST /api/runs/{run_id}/cancel` | cancel a running run |
+| `POST /api/invalidate` | announce a source data change `{"action": "service.action", "params": {...}, "data_version": "..."}` (available even with `--no-ui`) |
 | `GET /api/iam`, `POST /api/iam/validate`, `PUT /api/iam`, `POST /api/iam/try` | read, validate, save IAM; try a permission |
 | `GET /api/stream` | change signals (Server-Sent Events) |

@@ -13,10 +13,15 @@
   - `on_fail`이 `error`(실패 원인 마지막 줄)를 받을 수 있습니다.
   - 웹 UI 실행 상세에 meta와 idempotency_key가 보입니다.
 
+- **`invalidate()`: source 데이터가 바뀌었다고 알립니다** (data change, 1단계).
+  - 데이터를 읽는 서비스가 `invalidate("fetch", params={...}, data_version=...)`를 부르면, 다음 요청부터 그 Action과 하위 단계가 새로 계산됩니다. `data_version`이 cache key에 들어가는 방식이라 하위 단계는 저절로 따라옵니다.
+  - 자기 Action만 지정할 수 있습니다. 운영자와 webhook은 `msdf invalidate`, `POST /api/invalidate`.
+  - 예전 `data_version`으로 돌아가면 예전 cache를 다시 씁니다. 한 번도 invalidate하지 않은 Action의 cache는 그대로입니다.
+
 ### 바뀐 것
 
 - **`order()`의 반환값이 lineage_key에서 request_id로 바뀌었습니다.** `delete()`는 둘 다 받습니다.
-- DB 스키마 v3 (시작할 때 자동 변환, 백업 남김).
+- DB 스키마 v4 (시작할 때 자동 변환, 백업 남김).
 
 ## 0.2.0 — 2026-11-12
 

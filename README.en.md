@@ -93,7 +93,7 @@ python transform.py
 python app.py
 ```
 
-All you use is six names — `service`, `action`, `order`, `start`, `context`, `delete` — and three YAML files.
+All you use is seven names — `service`, `action`, `order`, `start`, `context`, `delete`, `invalidate` — and three YAML files.
 Data IDs, cache keys, queues, leases and serialization are handled by the engine and never appear in your code.
 
 ## What gets better

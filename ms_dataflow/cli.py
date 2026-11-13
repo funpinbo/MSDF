@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import logging
 import os
@@ -219,6 +220,53 @@ def cmd_runs(args: argparse.Namespace) -> int:
     return 0
 
 
+def _post(args: argparse.Namespace, path: str, body: dict[str, Any]) -> Any:
+    url, token = _engine(args)
+    req = urllib.request.Request(
+        url + path,
+        method="POST",
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read() or b"null")
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            raise SystemExit(
+                "엔진이 토큰을 요구합니다. --token 또는 MSDF_TOKEN을 주세요."
+            ) from None
+        detail = e.read().decode(errors="replace")
+        with contextlib.suppress(ValueError, AttributeError):
+            detail = json.loads(detail).get("detail", detail)
+        raise SystemExit(f"엔진 오류 {e.code}: {detail}") from None
+    except (urllib.error.URLError, OSError) as e:
+        raise SystemExit(f"엔진({url})에 연결하지 못했습니다: {e}. msdf up이 떠 있나요?") from None
+
+
+def cmd_invalidate(args: argparse.Namespace) -> int:
+    params: dict[str, Any] = {}
+    for item in args.param or []:
+        if "=" not in item:
+            raise SystemExit(f"--param은 이름=값 형식입니다: {item}")
+        k, v = item.split("=", 1)
+        try:
+            params[k] = json.loads(v)  # 숫자, true, "문자열" 등
+        except ValueError:
+            params[k] = v
+    out = _post(
+        args,
+        "/api/invalidate",
+        {"action": args.target, "params": params or None, "data_version": args.data_version},
+    )
+    scope = ", ".join(f"{k}={v}" for k, v in params.items()) or "전체"
+    print(f"{args.target} ({scope}) → data_version {out['version']}")
+    print("다음 요청부터 이 데이터와 그 하위 단계가 새로 계산됩니다.")
+    return 0
+
+
 def cmd_cancel(args: argparse.Namespace) -> int:
     out = _call(args, "POST", f"/api/runs/{args.run_id}/cancel")
     if out.get("ok"):
@@ -297,6 +345,13 @@ def main(argv: list[str] | None = None) -> int:
     runs.add_argument("--limit", type=int, default=20)
     runs.add_argument("--status", choices=["running", "done", "failed", "cancelled"])
     runs.set_defaults(func=cmd_runs)
+
+    inv = sub.add_parser("invalidate", help="source 데이터가 바뀌었다고 알린다 (운영자, webhook)")
+    remote(inv)
+    inv.add_argument("target", help="service.action")
+    inv.add_argument("--param", action="append", help="이름=값. 빼면 그 Action 전체")
+    inv.add_argument("--data-version", default=None, help="새 버전 값 (예: ETag). 빼면 새로 만든다")
+    inv.set_defaults(func=cmd_invalidate)
 
     cancel = sub.add_parser("cancel", help="진행 중인 run을 취소한다")
     remote(cancel)

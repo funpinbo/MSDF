@@ -171,6 +171,8 @@ msdf up    [--root .] [--config DIR] [--allow-external] [--no-cache]
 msdf status [--engine URL] [--token SECRET]        # which services are connected, last hour summary
 msdf runs   [--engine URL] [--token SECRET] [--limit 20] [--status running|done|failed|cancelled]
 msdf cancel RUN_ID [--engine URL] [--token SECRET] # cancel a running run
+msdf invalidate SERVICE.ACTION [--param k=v ...] [--data-version V] [--engine URL] [--token SECRET]
+                                                   # announce that source data changed (webhooks, operators)
 ```
 
 | Option | Default | Meaning |

@@ -158,5 +158,6 @@ queued → leased → running → saved → done
 | `GET /api/events` | 엔진 로그 (최근 3000줄) |
 | `GET /api/artifacts/{artifact_id}` | 데이터 계보 (hot과 cold 모두) |
 | `POST /api/runs/{run_id}/cancel` | 진행 중인 run 취소 |
+| `POST /api/invalidate` | source 데이터 변경 알림 `{"action": "service.action", "params": {...}, "data_version": "..."}` (`--no-ui`여도 있음) |
 | `GET /api/iam`, `POST /api/iam/validate`, `PUT /api/iam`, `POST /api/iam/try` | IAM 조회, 검증, 저장, 권한 시험 |
 | `GET /api/stream` | 변경 신호 (Server-Sent Events) |

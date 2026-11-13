@@ -32,7 +32,7 @@ One sentence sums up what MSDF tries to keep:
 
 The principles that follow from it:
 
-- **Less to memorize.** Six functions and three YAML files should be everything. If data IDs, queues, HTTP or serialization formats show up in user code, the design is rolled back.
+- **Less to memorize.** Seven functions and three YAML files should be everything. If data IDs, queues, HTTP or serialization formats show up in user code, the design is rolled back.
 - **Stop mistakes before running.** Rather than failing at runtime, report at load time with file, line, source, reason and how to fix.
 - **Each part has one responsibility.** Data: Resolver. Provenance: Artifact table. Permissions: IAM. Order: Planner.
 - **Usable locally first.** For now: one machine, SQLite. Spreading over several machines comes after.

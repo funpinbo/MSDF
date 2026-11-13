@@ -13,10 +13,15 @@
   - `on_fail` can receive `error` (the last line of the failure cause).
   - The web UI's run detail shows meta and idempotency_key.
 
+- **`invalidate()`: announce that source data changed** (data change, step 1).
+  - When the service that reads the data calls `invalidate("fetch", params={...}, data_version=...)`, that Action and its downstream steps are recomputed from the next request. `data_version` becomes part of the cache key, so downstream steps follow by themselves.
+  - Only your own Actions can be named. Operators and webhooks use `msdf invalidate` or `POST /api/invalidate`.
+  - Going back to an old `data_version` reuses the old cache. Actions never invalidated keep their cache.
+
 ### Changed
 
 - **`order()` now returns a request_id instead of a lineage_key.** `delete()` accepts either.
-- DB schema v3 (migrated automatically at startup, with a backup).
+- DB schema v4 (migrated automatically at startup, with a backup).
 
 ## 0.2.0 — 2026-11-12
 

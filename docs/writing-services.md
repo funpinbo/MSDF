@@ -2,7 +2,7 @@
 
 **한국어** | [English](en/writing-services.md)
 
-사용자가 쓰는 것은 여섯 개뿐입니다.
+사용자가 쓰는 것은 일곱 개뿐입니다.
 
 ```python
 from ms_dataflow import service, action, order, start, context, delete
@@ -16,6 +16,7 @@ from ms_dataflow import service, action, order, start, context, delete
 | `start()` | 이 프로세스를 엔진에 붙입니다 |
 | `@context` | 권한 검사에 쓸 값(계정 등)을 알려 주는 함수를 표시합니다 |
 | `delete(request_id)` | `order()`로 만든 데이터를 지웁니다 |
+| `invalidate(action, params)` | 자기 Action이 읽는 source 데이터가 바뀌었다고 알립니다 |
 
 서비스 코드에는 다른 서비스의 이름, DB 종류, 저장 위치, 데이터 ID가 나오지 않습니다. 나오게 된다면 무언가 잘못 쓰고 있다는 신호입니다.
 
@@ -216,6 +217,31 @@ def who() -> dict:
 - 반환 키는 `iam.yaml`의 계층 이름과 맞아야 합니다. 규칙이 쓰는 계층이 빠져 있으면 `start()` 때 등록이 거부됩니다.
 - 엔진은 이 값을 **그대로 믿습니다.** 값을 어떻게 얻고 검증할지는 서비스(인증 시스템)의 몫입니다.
 - 계층이 서비스뿐이라면 필요 없습니다.
+
+## `invalidate()`
+
+source 데이터(외부 DB, 웹 페이지, 파일)가 바뀌었다는 것을 **그 데이터를 읽는 서비스가** 알립니다.
+
+```python
+service("search")
+
+@action(params=["q"], outputs=["docs"])
+def fetch(q: str) -> list: ...
+
+# webhook, CDC, 그 서비스의 자체 확인 등에서
+invalidate("fetch", params={"q": "환불"})          # 이 params로 만든 것만
+invalidate("fetch")                                # fetch가 만든 것 전부
+invalidate("fetch", data_version="etag-42")        # 새 버전 값을 직접
+```
+
+- 다음 요청부터 그 Action과, 그 결과에 기대는 **모든 하위 단계가 새로 계산**됩니다. `data_version`이 cache key에 들어가므로 하위 단계의 입력 ID도 바뀌기 때문입니다.
+  누가 이 데이터에 기대는지는 몰라도 됩니다.
+- **자기 서비스의 Action만** 지정할 수 있습니다. 다른 서비스의 데이터가 바뀐 것은 그 서비스가 알립니다.
+- `data_version`을 주면 그 값이 버전입니다. 예전 값으로 돌아가면 예전 cache를 다시 씁니다. 빼면 엔진이 새 값을 만듭니다.
+- 이미 실행 중인 단계는 건드리지 않습니다.
+- 한 번도 `invalidate()`하지 않은 Action의 cache key는 그대로입니다.
+- 운영자나 외부 webhook은 `msdf invalidate search.fetch --param q=환불` 또는 `POST /api/invalidate`로 같은 일을 합니다.
+- MSDF는 source를 직접 확인(polling)하지 않습니다. 언제 바뀌었는지는 데이터를 아는 서비스가 판단합니다. 시간으로만 충분하면 `fresh_for`를 쓰세요.
 
 ## `delete()`
 

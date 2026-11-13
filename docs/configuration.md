@@ -169,6 +169,8 @@ msdf up    [--root .] [--config DIR] [--allow-external] [--no-cache]
 msdf status [--engine URL] [--token SECRET]        # 서비스 연결 상태와 최근 1시간 요약
 msdf runs   [--engine URL] [--token SECRET] [--limit 20] [--status running|done|failed|cancelled]
 msdf cancel RUN_ID [--engine URL] [--token SECRET] # 진행 중인 run 취소
+msdf invalidate SERVICE.ACTION [--param k=v ...] [--data-version V] [--engine URL] [--token SECRET]
+                                                   # source 데이터가 바뀌었다고 알림 (webhook, 운영)
 ```
 
 | 옵션 | 기본 | 뜻 |

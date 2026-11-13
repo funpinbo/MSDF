@@ -92,3 +92,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_run_idempotency ON run(requester, idempote
 -- 같은 단계를 두 번 동시에 만들지 않는다. 끝난 단계는 제약에서 빠진다.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_inflight ON step(step_key)
   WHERE kind = 'produce' AND status IN ('queued', 'leased', 'running', 'saved');
+
+-- 데이터 주인 서비스가 invalidate()로 알린 source 데이터의 버전. step_key의 재료가 된다.
+-- scope = '*' (그 Action 전체) 또는 params의 해시 (그 params로 만든 것만)
+CREATE TABLE IF NOT EXISTS source_version (
+  service    TEXT NOT NULL,
+  action     TEXT NOT NULL,
+  scope      TEXT NOT NULL,
+  params     TEXT,                  -- scope가 params일 때 원래 값 (JSON, 보기용)
+  version    TEXT NOT NULL,
+  changed_at REAL NOT NULL,
+  PRIMARY KEY (service, action, scope)
+);

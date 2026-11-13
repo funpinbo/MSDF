@@ -26,6 +26,7 @@ from ms_dataflow.execute.engine import Engine
 from ms_dataflow.metrics import LogBuffer
 from ms_dataflow.models import (
     DeleteRequest,
+    InvalidateRequest,
     Order,
     OrderRequest,
     OrderResponse,
@@ -398,6 +399,49 @@ class Scheduler:
             out: dict[str, Any] = await sched.db(
                 sched.engine.delete, req.requester, req.context, req.lineage_key, req.cascade
             )
+            return out
+
+        @app.post("/invalidate")
+        async def invalidate(req: InvalidateRequest) -> dict[str, Any]:
+            inst = sched.instances.get(req.instance_id)
+            if inst is None or req.requester not in inst.services:
+                raise HTTPException(
+                    403, {"code": "order_error", "message": "등록되지 않은 인스턴스"}
+                )
+            out: dict[str, Any] = await sched.db(
+                sched.engine.invalidate, req.requester, req.action, req.params, req.data_version
+            )
+            log.info(
+                "invalidate: %s.%s %s → %s",
+                req.requester,
+                req.action,
+                req.params or "(전체)",
+                out["version"],
+            )
+            sched.kick()
+            return out
+
+        # --- source 무효화 (운영자, webhook) ------------------------------------
+        @app.post("/api/invalidate")
+        async def api_invalidate(body: dict[str, Any]) -> dict[str, Any]:
+            target = str(body.get("action", ""))
+            if target.count(".") != 1:
+                raise HTTPException(400, "action은 service.action 형식이어야 합니다")
+            svc, act = target.split(".")
+            try:
+                out: dict[str, Any] = await sched.db(
+                    sched.engine.invalidate,
+                    svc,
+                    act,
+                    body.get("params") or None,
+                    body.get("data_version"),
+                )
+            except OrderError as e:
+                raise HTTPException(400, str(e)) from None
+            log.info(
+                f"invalidate (API): {target} {body.get('params') or '(전체)'} → {out['version']}"
+            )
+            sched.kick()
             return out
 
         @app.get("/health")

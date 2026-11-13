@@ -90,6 +90,18 @@ class LocalRunner:
         )
         return self.last.run_id
 
+    def invalidate(
+        self,
+        action: str,
+        params: dict[str, Any] | None,
+        data_version: str | None,
+        caller_file: str,
+    ) -> dict[str, Any]:
+        service = self.project.registry.owner_of(caller_file)
+        if service is None:
+            raise OrderError(f"{caller_file}이 어느 서비스에 속하는지 알 수 없습니다.")
+        return self.engine.invalidate(service, action, params, data_version)
+
     def cancel(self, request_id: str) -> dict[str, Any]:
         return self.engine.cancel(request_id)
 
