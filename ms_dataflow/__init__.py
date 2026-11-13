@@ -17,4 +17,4 @@ from ms_dataflow.decorators import (
 )
 
 __all__ = ["service", "action", "order", "start", "context", "delete", "invalidate", "cancel"]
-__version__ = "0.5.0"
+__version__ = "0.5.1"

@@ -79,7 +79,10 @@ class Client:
             headers["Authorization"] = f"Bearer {token}"
         self.http = httpx.Client(timeout=10.0, headers=headers)
         self.host = host
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # proto를 IPPROTO_TCP로 명시해야 asyncio가 받은 연결에 TCP_NODELAY를 켠다
+        # (proto=0이면 켜지 않는다).
+        # 꺼져 있으면 응답이 Nagle + 상대의 지연 ACK에 걸려 단계마다 약 40ms를 기다린다.
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._sock.bind((host, port))
         self.port = self._sock.getsockname()[1]

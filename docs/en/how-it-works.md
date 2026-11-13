@@ -133,6 +133,20 @@ Most of a step's cost is **reading and writing data** plus the Action's own comp
 - On a cache hit, the step is skipped without even reading the data.
 - Queue, start, save and finish times are recorded per step, so the UI timeline shows where time goes.
 
+Measurements (one machine, a 3-step chain within one service, file storage):
+
+| Data between steps | Request → delivery | Engine dispatch between steps | Save + load (per step) |
+| --- | --- | --- | --- |
+| small dict to 0.1MB | about 27ms | about 2ms | under 1ms |
+| 1.3MB (JSON, 10k rows) | about 65ms | about 2ms | about 23ms |
+| 12.8MB (JSON, 100k rows) | about 375ms | about 2ms | about 165ms |
+
+- With small data, the Action's own time dominates; the engine adds a few ms per step.
+- With large data, saving and loading grow. For tabular data, pass DataFrames: the same 1M rows are 12.8MB with ~78ms load as JSON (a list),
+  and 4.3MB with ~51ms load as a DataFrame (Parquet).
+- "Let the next step in the same service use the just-saved output from memory" was measured and declined. With small data it would save under 3%;
+  for large data it would require routing the next step to the same instance and holding data in memory, which complicates failure recovery.
+
 ## Web UI
 
 Served with `msdf up` at `http://127.0.0.1:8787/ui`. It is a Vue app, and only its source (`frontend/`) is distributed, so it has to be built once

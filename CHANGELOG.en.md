@@ -2,6 +2,16 @@
 
 [한국어](CHANGELOG.md) | **English**
 
+## 0.5.1 — 2026-11-13
+
+### Fixed
+
+- **Every step waited about 40ms before the next one.** The service-side listening socket was created with `proto=0`, so asyncio did not enable `TCP_NODELAY` on accepted connections, and responses to the engine were held by Nagle's algorithm plus the engine's delayed ACK. It is now created with `IPPROTO_TCP`: a 3-step request with small data went from about 156ms to **about 27ms** (dispatch between steps 32ms → 2ms).
+
+### Decided
+
+- "Let the next step in the same service use the just-saved output from memory" was measured and **declined**. It would save under 3% with small data, and DataFrames (Parquet) work better for large data. Measurements are in [How it works › Performance](docs/en/how-it-works.md#performance).
+
 ## 0.5.0 — 2026-11-13
 
 ### New

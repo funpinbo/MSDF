@@ -285,3 +285,21 @@ def test_subscription_is_refreshed_across_processes(cluster):
     assert ok.json()["subscription_ended"]
     r = httpx.post(f"{cluster.url}/api/invalidate", json={"action": "src.make"})
     assert r.json()["subscriptions"] == 0
+
+
+def test_worker_socket_lets_asyncio_disable_nagle(calc):
+    """서비스의 수신 소켓은 proto=IPPROTO_TCP여야 asyncio가 받은 연결에 TCP_NODELAY를 켠다.
+
+    proto=0으로 만들면 응답이 Nagle + 엔진의 지연 ACK에 걸려 단계마다 약 40ms를 기다렸다(0.5.1에서 고침).
+    """
+    import socket as s
+
+    from ms_dataflow.client import Client
+    from ms_dataflow.registry import collect
+
+    c = Client(collect(calc), "http://127.0.0.1:9")
+    try:
+        assert c._sock.proto == s.IPPROTO_TCP
+    finally:
+        c._sock.close()
+        c.http.close()

@@ -2,7 +2,7 @@
 
 [한국어](../roadmap.md) | **English**
 
-## Current status: 0.5.0
+## Current status: 0.5.1
 
 Runs on one machine as an engine (`msdf up`) plus several service processes.
 
@@ -28,6 +28,7 @@ Runs on one machine as an engine (`msdf up`) plus several service processes.
 | 18 | Contribution CI: philosophy, architecture, compatibility and docs guards, e2e, install checks | done (0.3.1) |
 | 19 | Data change step 2: `subscribe`, `cancel(request_id)`, subscriptions page | done (0.4) |
 | 20 | Slot type check at load time, ending idle subscriptions | done (0.5) |
+| 21 | Removing a 40ms wait between steps, performance measurements | done (0.5.1) |
 
 ## Direction
 
@@ -49,7 +50,6 @@ With data change (`invalidate`, `subscribe`), the starting point — "react to d
 | Item | Contents |
 | --- | --- |
 | English messages and UI | CLI output, error messages and the web UI are in Korean today |
-| Reusing memory between consecutive steps in the same service | skip re-reading an output that was just saved, to cut interactive latency. Decide after measuring |
 | Large data and streaming | `ctx.load()`, `ctx.save()` for reading and writing storage directly inside an Action |
 | Force-stopping a running step, isolating user Actions | an option to run Actions in a subprocess |
 | Trace export | lineage and step timings to OpenTelemetry |
@@ -57,6 +57,7 @@ With data change (`invalidate`, `subscribe`), the starting point — "react to d
 | Multiple users and roles | today there is one token for the whole engine |
 
 Not planned: periodic runs (cron), deploying or scaling services, LLM-specific features, code inside DAGs.
+Measured and declined: reusing memory between consecutive steps in the same service ([How it works › Performance](how-it-works.md#performance)).
 
 ## Known limitations
 
