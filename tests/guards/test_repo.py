@@ -28,6 +28,11 @@ def test_no_build_output_or_local_state_is_committed():
     )
 
 
+LEFTOVER = re.compile(
+    r"(?<![\w.])breakpoint\(\)|\bpdb\.set_trace\(|^\s*import pdb\b|^\s*from pdb import"
+)
+
+
 def test_every_python_file_parses_and_has_no_leftovers():
     found = []
     for f in FILES:
@@ -35,8 +40,10 @@ def test_every_python_file_parses_and_has_no_leftovers():
             continue
         text = (ROOT / f).read_text("utf-8")
         compile(text, f, "exec")
+        if f.startswith("tests/guards/"):  # 검사 규칙 자체에 그 단어가 들어 있다
+            continue
         for i, line in enumerate(text.splitlines(), 1):
-            if re.search(r"\b(breakpoint\(\)|pdb\.set_trace|import pdb)\b", line):
+            if LEFTOVER.search(line):
                 found.append(f"{f}:{i}: {line.strip()}")
     assert not found, rule(
         "디버깅 흔적을 남기지 않는다.",
