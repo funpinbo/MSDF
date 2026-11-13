@@ -157,8 +157,18 @@ def catalog(sched: Scheduler) -> dict[str, Any]:
     return {"services": services, "strict": sched.project.strict_services}
 
 
-def install(sched: Scheduler) -> None:
+def install(sched: Scheduler, *, pages: bool = True) -> None:
+    """JSON API(/api/...)는 항상 단다. CLI(msdf status, runs, cancel)도 이것을 쓴다.
+
+    pages=False(msdf up --no-ui)면 웹 화면(/ui)만 뺀다.
+    """
+
     def routes(app: FastAPI, sched: Scheduler) -> None:
+        if pages:
+            _pages(app)
+        _api(app, sched)
+
+    def _pages(app: FastAPI) -> None:
         # --- 정적 파일 -------------------------------------------------------
         @app.get("/", include_in_schema=False)
         async def root() -> RedirectResponse:
@@ -180,6 +190,7 @@ def install(sched: Scheduler) -> None:
             # 해시 라우팅이라 나머지는 index.html
             return FileResponse(index, media_type=MEDIA_TYPES[".html"])
 
+    def _api(app: FastAPI, sched: Scheduler) -> None:
         # --- 맵 --------------------------------------------------------------
         @app.get("/api/overview")
         async def api_overview(window: float = 3600) -> dict[str, Any]:

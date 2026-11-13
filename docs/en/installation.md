@@ -81,23 +81,23 @@ pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git"
 To pin a version, append a tag or commit.
 
 ```bash
-pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.3.0"
+pip install "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.3.1"
 ```
 
 In a dependency file:
 
 ```text
 # requirements.txt
-msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.3.0
+msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.3.1
 ```
 
 ```toml
 # pyproject.toml
 [project]
-dependencies = ["msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.3.0"]
+dependencies = ["msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git@v0.3.1"]
 ```
 
-With uv: `uv add "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git" --tag v0.3.0`.
+With uv: `uv add "msdf[runtime] @ git+https://github.com/funpinbo/MSDF.git" --tag v0.3.1`.
 
 **Installing from a git URL does not include the built web UI** (the repository does not contain build output). To run the engine and the UI
 from such an install, clone the repository, build the UI once, and point to that folder.
@@ -117,13 +117,13 @@ For servers without internet or git access, build a wheel file and copy it over.
 cd MSDF
 (cd frontend && npm install && npm run build)
 uv build --wheel                   # or: pip install build && python -m build --wheel
-ls dist/                           # msdf-0.3.0-py3-none-any.whl
+ls dist/                           # msdf-0.3.1-py3-none-any.whl
 ```
 
 On the target machine:
 
 ```bash
-pip install "msdf-0.3.0-py3-none-any.whl[server]"
+pip install "msdf-0.3.1-py3-none-any.whl[server]"
 ```
 
 > The wheel contains the built code of the libraries the UI uses: Vue, vue-router, Vue Flow (which includes VueUse) and dagre are MIT;

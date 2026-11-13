@@ -2,6 +2,21 @@
 
 **한국어** | [English](CHANGELOG.en.md)
 
+## 0.3.1 — 2026-11-13
+
+### 고친 것
+
+- **Action 버전이 파이썬 버전마다 달랐습니다.** 같은 코드라도 3.11, 3.12, 3.13에서 다른 버전이 나와, 엔진과 서비스를 다른 파이썬으로 띄우면 "다른 코드로 이미 등록"되었다며 거부되거나 파이썬만 올려도 cache가 무효가 될 수 있었습니다. 이제 버전 해시가 파이썬 버전과 무관합니다.
+  - 그 대신 **모든 Action의 버전이 한 번 바뀌어, 기존 cache가 한 번 다시 계산됩니다.**
+- `msdf up --no-ui`에서 JSON API까지 빠져 `msdf status`, `runs`, `cancel`이 동작하지 않았습니다. 이제 `--no-ui`는 웹 화면만 끕니다.
+
+### 기여자를 위해
+
+- CI를 다섯 job으로 나눴습니다: lint, guards, test(3.11~3.13), e2e, install.
+- `tests/guards/`: MSDF 철학, 구조, 호환성(cache key, Action 버전, DB 스키마), 문서(ko/en 짝, 링크, 예시 문법), 저장소 위생을 확인합니다. 실패하면 원칙, 이유, 고칠 방법을 알려 줍니다.
+- `tests/e2e/`: "시작하기"를 사용자처럼 끝까지 실행합니다(`msdf init` → `up --token` → 서비스 → `invalidate`).
+- Pull request 템플릿과 CONTRIBUTING의 "CI가 확인하는 것".
+
 ## 0.3.0 — 2026-11-13
 
 ### 새 기능

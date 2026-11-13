@@ -6,13 +6,12 @@
 from __future__ import annotations
 
 import ast
-import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
 from ms_dataflow.decorators import check_signature
 from ms_dataflow.errors import DeclarationError
-from ms_dataflow.ids import version_of_node
+from ms_dataflow.ids import ast_digest, version_of_node
 from ms_dataflow.models import parse_duration
 
 _DECORATORS = {"service", "action", "context"}
@@ -341,8 +340,7 @@ def _digest(node: ast.AST) -> str:
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 _strip_doc(item)
         _strip_doc(copy)
-    dumped = ast.dump(copy, annotate_fields=False, include_attributes=False)
-    return hashlib.sha256(dumped.encode()).hexdigest()[:12]
+    return ast_digest(copy)
 
 
 def _strip_doc(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> None:

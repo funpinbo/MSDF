@@ -58,10 +58,9 @@ def build_app(
     from ms_dataflow.store import Store
 
     sched = Scheduler(project, Store(db), settings, token=token)
-    if ui:
-        from ms_dataflow.ui import install as install_ui
+    from ms_dataflow.ui import install as install_ui
 
-        install_ui(sched)
+    install_ui(sched, pages=ui)  # JSON API는 항상, 웹 화면은 ui일 때만
     return sched.app()
 
 

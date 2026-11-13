@@ -2,7 +2,7 @@
 
 [한국어](CONTRIBUTING.md) | **English**
 
-Current version: **0.3.0.** What comes next is listed under "What comes next" in [docs/en/roadmap.md](docs/en/roadmap.md).
+Current version: **0.3.1.** What comes next is listed under "What comes next" in [docs/en/roadmap.md](docs/en/roadmap.md).
 
 ## Getting started
 
@@ -56,6 +56,35 @@ If any of these five break, wrong data goes out silently. When you touch related
 4. **Ownership** — an Action reachable from two services is a load error
 5. **Restart safety** — killing a Worker mid-run gets the step reassigned (`tests/test_distributed.py`).
    There is no test yet that kills the Scheduler itself at an arbitrary point and restarts it.
+
+## What CI checks
+
+When you open a pull request, GitHub Actions checks five things. The name of the failed job tells you what kind of problem it is.
+
+| job | What it checks | If it fails |
+| --- | --- | --- |
+| 1. lint | `ruff check`, `ruff format --check`, `mypy` (strict) | run the commands under "Code style" |
+| 2. guards | MSDF's philosophy, architecture, compatibility and docs (`tests/guards/`) | follow the failure message's `[원칙] [이유] [고칠 방법]` (principle, reason, how to fix) |
+| 3. test | every feature, on Python 3.11, 3.12 and 3.13 | run that test locally with `uv run pytest -k name` |
+| 4. e2e | "Getting started" end to end, as a user: `msdf init` → `check` → `up --token` → services → `invalidate` | `uv run pytest tests/e2e -v` |
+| 5. install | an install without extras (does `msdf check` work?), and a wheel that includes the UI | check whether a core module imports a server library |
+
+Principles the guards check:
+
+| Area | Principles |
+| --- | --- |
+| Philosophy | Seven public functions (`service`, `action`, `order`, `start`, `context`, `delete`, `invalidate`). Service code does not import engine internals, and services do not import each other. No scheduler, deployment or LLM-framework dependencies. `meta` never enters the cache key |
+| Architecture | Core modules (decorators, registry, config, Planner) work without the server. The Planner is a pure function. Only the engine writes the metadata DB. Hashes live only in `ids.py`. Library code does not `print`. New fields in engine↔service messages have defaults |
+| Compatibility | Cache keys and Action versions are the same for the same input, regardless of MSDF version or Python version. Changing `schema.sql` comes with a `SCHEMA_VERSION` bump and a migration. The version number agrees in three places, and CHANGELOG (ko/en) has an entry for it |
+| Docs | Korean and English docs exist in pairs with the same number of headings, code blocks and tables. Every public function and `msdf` command is documented. Relative links are not broken. Python examples are valid syntax |
+| Repository | No build output (`ui/dist`), local state (`.msdf`), `design/`, secrets or `breakpoint()` committed |
+
+Guards can be changed on purpose. If your contribution changes a principle itself, agree on it in an issue first, and update the guard, the docs (ko/en) and the CHANGELOG in the same PR.
+
+```bash
+uv run pytest tests/guards -v     # guards only
+uv run pytest                     # everything (including e2e, about 30 seconds)
+```
 
 ## Code style
 

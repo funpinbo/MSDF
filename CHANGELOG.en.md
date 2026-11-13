@@ -2,6 +2,21 @@
 
 [한국어](CHANGELOG.md) | **English**
 
+## 0.3.1 — 2026-11-13
+
+### Fixed
+
+- **Action versions differed between Python versions.** The same code produced different versions on 3.11, 3.12 and 3.13, so an engine and a service on different Pythons could be refused as "already registered with different code", and upgrading Python alone could invalidate the cache. Version hashes are now independent of the Python version.
+  - In exchange, **every Action's version changes once, so existing caches are recomputed once.**
+- `msdf up --no-ui` also dropped the JSON API, so `msdf status`, `runs` and `cancel` did not work. `--no-ui` now turns off only the web pages.
+
+### For contributors
+
+- CI is split into five jobs: lint, guards, test (3.11–3.13), e2e, install.
+- `tests/guards/`: checks MSDF's philosophy, architecture, compatibility (cache keys, Action versions, DB schema), docs (ko/en pairs, links, example syntax) and repository hygiene. A failure tells you the principle, the reason and how to fix it.
+- `tests/e2e/`: runs "Getting started" end to end as a user (`msdf init` → `up --token` → services → `invalidate`).
+- A pull request template and "What CI checks" in CONTRIBUTING.
+
 ## 0.3.0 — 2026-11-13
 
 ### New

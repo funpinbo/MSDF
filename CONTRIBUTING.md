@@ -2,7 +2,7 @@
 
 **한국어** | [English](CONTRIBUTING.en.md)
 
-현재 버전: **0.3.0.** 다음에 할 일은 [docs/roadmap.md](docs/roadmap.md)의 "다음에 할 것"에 있습니다.
+현재 버전: **0.3.1.** 다음에 할 일은 [docs/roadmap.md](docs/roadmap.md)의 "다음에 할 것"에 있습니다.
 
 ## 시작하기
 
@@ -56,6 +56,35 @@ cd frontend && npm install && npm run build   # 웹 UI (빌드 결과는 커밋�
 4. **소속 판정** — 두 서비스가 같은 Action에 닿으면 로딩 오류
 5. **재시작 안전성** — Worker를 실행 중에 죽여도 단계가 다시 배정된다 (`tests/test_distributed.py`).
    Scheduler 자체를 임의 시점에 죽였다 살리는 테스트는 아직 없습니다.
+
+## CI가 확인하는 것
+
+Pull request를 올리면 GitHub Actions가 다섯 가지를 확인합니다. 실패한 job 이름이 무엇이 문제인지 알려 줍니다.
+
+| job | 확인하는 것 | 실패하면 |
+| --- | --- | --- |
+| 1. lint | `ruff check`, `ruff format --check`, `mypy` (strict) | 아래 "코드 스타일" 명령을 실행 |
+| 2. guards | MSDF 철학, 구조, 호환성, 문서 (`tests/guards/`) | 실패 메시지의 `[원칙] [이유] [고칠 방법]`을 따른다 |
+| 3. test | 모든 기능. 파이썬 3.11, 3.12, 3.13 | 해당 테스트를 로컬에서 `uv run pytest -k 이름` |
+| 4. e2e | "시작하기"를 사용자처럼 끝까지: `msdf init` → `check` → `up --token` → 서비스 → `invalidate` | `uv run pytest tests/e2e -v` |
+| 5. install | 묶음 없는 설치(`msdf check`가 되는지), UI를 넣은 휠 | 핵심 모듈에 서버 라이브러리를 import했는지 확인 |
+
+guard가 확인하는 원칙:
+
+| 분류 | 원칙 |
+| --- | --- |
+| 철학 | 공개 함수는 일곱 개(`service`, `action`, `order`, `start`, `context`, `delete`, `invalidate`). 서비스 코드는 엔진 내부를 import하지 않고, 서비스끼리 import하지 않는다. 스케줄러·배포 도구·LLM 프레임워크 의존성을 넣지 않는다. `meta`는 cache key에 들어가지 않는다 |
+| 구조 | 핵심 모듈(데코레이터, 레지스트리, 설정, Planner)은 서버 없이 동작한다. Planner는 순수 함수다. 메타데이터 DB에 쓰는 곳은 엔진뿐이다. 해시는 `ids.py`에서만. 라이브러리 코드는 `print`하지 않는다. 엔진↔서비스 메시지의 새 필드는 기본값을 가진다 |
+| 호환성 | cache key와 Action 버전은 같은 입력이면 MSDF 버전·파이썬 버전과 무관하게 같다. `schema.sql`을 바꾸면 `SCHEMA_VERSION`과 변환(migration)을 함께 추가한다. 버전 번호는 세 곳이 같고, CHANGELOG(ko/en)에 그 버전 항목이 있다 |
+| 문서 | 한국어와 영어 문서가 짝으로 있고 제목·코드 블록·표 수가 같다. 공개 함수와 `msdf` 명령이 모두 문서에 있다. 상대 링크가 깨지지 않았다. 파이썬 예시는 문법이 맞다 |
+| 저장소 | 빌드 결과(`ui/dist`), 로컬 상태(`.msdf`), `design/`, 비밀 값, `breakpoint()`가 커밋되지 않았다 |
+
+guard는 일부러 바꿀 수 있습니다. 원칙 자체를 바꾸는 기여라면 이슈에서 먼저 합의하고, 같은 PR에서 guard와 문서(ko/en), CHANGELOG를 함께 고쳐 주세요.
+
+```bash
+uv run pytest tests/guards -v     # guard만
+uv run pytest                     # 전부 (e2e 포함, 약 30초)
+```
 
 ## 코드 스타일
 

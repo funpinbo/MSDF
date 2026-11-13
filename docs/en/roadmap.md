@@ -2,7 +2,7 @@
 
 [한국어](../roadmap.md) | **English**
 
-## Current status: 0.3.0
+## Current status: 0.3.1
 
 Runs on one machine as an engine (`msdf up`) plus several service processes.
 

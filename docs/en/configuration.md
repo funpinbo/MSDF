@@ -184,7 +184,7 @@ msdf invalidate SERVICE.ACTION [--param k=v ...] [--data-version V] [--engine UR
 | `--lease-ttl` | 60 | step lease time (seconds). Heartbeats every third of it |
 | `--keep-generations` | 3 | how many latest generations of the same request to keep in the cache (hot) |
 | `--keep-versions` | 3 | how many results that differ only by version to keep hot for the same position |
-| `--no-ui` | off | do not serve the web UI |
+| `--no-ui` | off | do not serve the web pages (`/ui`). The JSON API stays, so `msdf status`, `runs` and so on keep working |
 | `--ui-dist` | `ui/dist` inside the package | a built web UI folder. Also settable with the `MSDF_UI_DIST` environment variable |
 | `--token` | `MSDF_TOKEN` | engine token. When set, services, the web UI, `msdf status` and so on must all send the same value |
 | `--no-cache` | off | do not use the code analysis cache (`<config>/.msdf/scan.cache`), which skips re-reading unchanged files |

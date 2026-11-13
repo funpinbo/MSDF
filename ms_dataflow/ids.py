@@ -105,12 +105,42 @@ def _strip(node: ast.AST) -> ast.AST:
     return node
 
 
+_SKIP_FIELDS = {"ctx", "type_comment", "kind"}
+
+
+def _canon(value: Any) -> str:
+    """AST를 파이썬 버전과 무관한 문자열로.
+
+    ``ast.dump``는 버전마다 노드에 필드가 늘어(예: 3.12의 ``type_params``) 같은 코드도
+    다른 값이 된다.
+    여기서는 비어 있는 필드(None, [])와 문맥 표시(ctx)를 빼고 이름을 붙여 적으므로,
+    새 버전이 기본값이 빈 필드를 더해도 결과가 같다.
+    """
+    if isinstance(value, ast.AST):
+        parts = []
+        for name in value._fields:
+            if name in _SKIP_FIELDS:
+                continue
+            v = getattr(value, name, None)
+            if v is None or v == []:
+                continue
+            parts.append(f"{name}={_canon(v)}")
+        return f"{type(value).__name__}({','.join(parts)})"
+    if isinstance(value, list):
+        return "[" + ",".join(_canon(v) for v in value) + "]"
+    return repr(value)
+
+
+def ast_digest(node: ast.AST) -> str:
+    """AST 노드 하나의 짧은 해시. 파이썬 3.11~3.13에서 같은 값을 낸다."""
+    return hashlib.sha256(_canon(node).encode()).hexdigest()[:12]
+
+
 def version_of_node(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     """함수 AST의 정규화 해시. 주석, 공백, 줄 위치, docstring, 데코레이터는 영향을 주지 않는다."""
     copy = ast.parse(ast.unparse(node)).body[0]
     stripped = _strip(copy)
-    dumped = ast.dump(stripped, annotate_fields=False, include_attributes=False)
-    return hashlib.sha256(dumped.encode()).hexdigest()[:12]
+    return ast_digest(stripped)
 
 
 def version_of_source(source: str) -> str:

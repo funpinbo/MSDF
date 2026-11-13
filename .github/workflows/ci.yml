@@ -1,14 +1,55 @@
 name: CI
 
+# 기여 코드를 다섯 가지 관점에서 확인한다. 실패한 job 이름이 무엇이 문제인지 알려 준다.
+#   1. lint         코드 스타일과 타입
+#   2. guards       MSDF 철학, 구조, 호환성(cache key, DB), 문서(ko/en)  ← tests/guards
+#   3. test         모든 기능 (파이썬 3.11 / 3.12 / 3.13)
+#   4. e2e          '시작하기'를 사용자처럼 끝까지 (msdf init → up → 서비스 → invalidate)
+#   5. install      묶음 없는 설치, UI를 넣은 휠 설치
+# 자세한 기준은 CONTRIBUTING.md의 "CI가 확인하는 것".
+
 on:
   push:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  lint:
+    name: "1. lint (ruff, mypy)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --all-extras
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy ms_dataflow
+
+  guards:
+    name: "2. guards (philosophy, architecture, compatibility, docs)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --all-extras
+      - run: uv run pytest tests/guards -v --tb=short
+
   test:
+    name: "3. test (python ${{ matrix.python-version }})"
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
@@ -17,15 +58,44 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --all-extras
-      - run: uv run ruff check .
-      - run: uv run mypy ms_dataflow
-      - run: uv run pytest
+      # guards도 함께 돈다: Action 버전 해시가 세 파이썬에서 같은지 여기서 확인된다
+      - run: uv run pytest --ignore=tests/e2e
 
-  ui:
+  e2e:
+    name: "4. e2e (getting started, as a user)"
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --all-extras
+      - run: uv run pytest tests/e2e -v --tb=short
+
+  install-core:
+    name: "5a. install without extras"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: pip install . (pydantic, pyyaml only)
+        run: |
+          python -m venv /tmp/core
+          /tmp/core/bin/pip install .
+          /tmp/core/bin/msdf --version
+          /tmp/core/bin/msdf check --root examples/chatbot
+      - name: start() and msdf up explain the missing extra
+        run: |
+          if /tmp/core/bin/msdf up --root examples/chatbot 2> err.txt; then exit 1; fi
+          grep -q "server" err.txt
+          if /tmp/core/bin/python -c "from ms_dataflow import start; start(timeout=1)" 2> err2.txt; then exit 1; fi
+          grep -q "runtime" err2.txt
+
+  install-wheel:
+    name: "5b. UI build + wheel"
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,4 +104,15 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+        working-directory: frontend
       - run: npm run build
+        working-directory: frontend
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv build --wheel
+      - name: the wheel contains the UI and serves it
+        run: |
+          python -m venv /tmp/w
+          /tmp/w/bin/pip install "$(ls dist/*.whl)[server]"
+          cd /tmp && /tmp/w/bin/python -c "from ms_dataflow.ui import dist_dir; p = dist_dir() / 'index.html'; assert p.exists(), p; print('UI in wheel:', p)"

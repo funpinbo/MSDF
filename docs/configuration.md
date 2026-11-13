@@ -182,7 +182,7 @@ msdf invalidate SERVICE.ACTION [--param k=v ...] [--data-version V] [--engine UR
 | `--lease-ttl` | 60 | 단계 lease 시간(초). 심박은 그 1/3마다 |
 | `--keep-generations` | 3 | 같은 요청의 최신 몇 세대를 캐시(hot)에 둘지 |
 | `--keep-versions` | 3 | 같은 자리에서 버전만 다른 결과를 몇 개 hot에 둘지 |
-| `--no-ui` | 꺼짐 | 웹 UI를 띄우지 않음 |
+| `--no-ui` | 꺼짐 | 웹 화면(`/ui`)을 띄우지 않음. JSON API는 그대로라 `msdf status`, `runs` 등은 동작 |
 | `--ui-dist` | 패키지 안 `ui/dist` | 빌드한 웹 UI 폴더. 환경 변수 `MSDF_UI_DIST`로도 지정 |
 | `--token` | `MSDF_TOKEN` | 엔진 토큰. 주면 서비스, 웹 UI, `msdf status` 등이 모두 같은 값을 보내야 한다 |
 | `--no-cache` | 꺼짐 | 코드 분석 캐시(`<config>/.msdf/scan.cache`)를 쓰지 않는다. 바뀌지 않은 파일은 다시 분석하지 않는 캐시다 |
