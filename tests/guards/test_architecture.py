@@ -68,7 +68,12 @@ def test_planner_is_a_pure_function():
 
 
 # 메타데이터 DB에 쓰는 곳. resolvers/sqlite.py는 사용자 데이터 저장소라 별개다
-SQL_WRITERS = {"execute/engine.py", "ops.py", "resolvers/sqlite.py"}
+SQL_WRITERS = {
+    "execute/engine.py",
+    "ops.py",
+    "resolvers/sqlite.py",
+    "store/__init__.py",  # 시작할 때의 스키마 변환(MIGRATIONS)만. 엔진이 뜨기 전에 한 번
+}
 _WRITE = re.compile(r"\b(INSERT\s+(OR\s+\w+\s+)?INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b", re.I)
 
 

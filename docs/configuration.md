@@ -165,7 +165,7 @@ msdf check [--root .] [--config DIR] [--allow-external] [--no-cache]
 msdf up    [--root .] [--config DIR] [--allow-external] [--no-cache]
            [--host 127.0.0.1] [--port 8787] [--db PATH] [--token SECRET]
            [--lease-ttl 60] [--keep-generations 3] [--keep-versions 3] [--no-ui] [--ui-dist DIR]
-           [--refresh-min-gap 1] [--max-subscriptions 1000] [--subscription-idle 600]
+           [--refresh-min-gap 1] [--max-subscriptions 1000] [--subscription-idle 600] [--keep-history 7d]
 
 # 떠 있는 엔진에 묻는다 (--engine 기본: MSDF_SCHEDULER 또는 http://127.0.0.1:8787, --token 기본: MSDF_TOKEN)
 msdf status [--engine URL] [--token SECRET]        # 서비스 연결 상태와 최근 1시간 요약
@@ -190,6 +190,7 @@ msdf invalidate SERVICE.ACTION [--param k=v ...] [--data-version V] [--engine UR
 | `--refresh-min-gap` | 1 | 구독 하나의 refresh 사이 최소 간격(초). 변경이 몰려도 이보다 자주 다시 계산하지 않음 |
 | `--max-subscriptions` | 1000 | 동시에 살아 있는 구독 수 상한 |
 | `--subscription-idle` | 600 | 요청 서비스가 이만큼(초) 연결되지 않으면 그 서비스의 구독을 끝냄 |
+| `--keep-history` | `7d` | 끝난 run과 단계 기록을 이 기간 동안 남김. `30m`, `12h`, `7d`, 초 단위 숫자. `0`(또는 `forever`)이면 지우지 않음. cache와 계보, 살아 있는 구독의 run은 지우지 않음 |
 | `--no-cache` | 꺼짐 | 코드 분석 캐시(`<config>/.msdf/scan.cache`)를 쓰지 않는다. 바뀌지 않은 파일은 다시 분석하지 않는 캐시다 |
 
 서비스 쪽 환경 변수: `MSDF_SCHEDULER`(엔진 주소, 기본 `http://127.0.0.1:8787`), `MSDF_TOKEN`(엔진 토큰).

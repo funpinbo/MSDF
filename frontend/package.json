@@ -1,7 +1,7 @@
 {
   "name": "msdf-ui",
   "private": true,
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "MSDF 엔진 웹 UI (빌드 결과는 ms_dataflow/ui/dist)",
   "license": "MIT",
   "type": "module",

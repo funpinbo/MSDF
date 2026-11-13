@@ -225,6 +225,7 @@ class Settings(Frozen):
     reaper_every: float = 10.0
     keep_generations: int = 3  # N: 같은 요청의 최신 generation 몇 개를 hot에 둘지
     keep_versions: int = 3  # M: 같은 자리에서 version만 다른 복제본 몇 개를 hot에 둘지
+    keep_history: float = 7 * 86400  # 끝난 run/step 기록을 둘 기간(초). 0 = 지우지 않음
     max_replans: int = 3
     refresh_min_gap: float = 1.0  # 구독 refresh 사이 최소 간격(초)
     max_subscriptions: int = 1000  # 동시에 살아 있는 구독 수 상한

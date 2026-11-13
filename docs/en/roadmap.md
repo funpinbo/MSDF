@@ -2,7 +2,7 @@
 
 [한국어](../roadmap.md) | **English**
 
-## Current status: 0.5.1
+## Current status: 0.6.0
 
 Runs on one machine as an engine (`msdf up`) plus several service processes.
 
@@ -29,6 +29,7 @@ Runs on one machine as an engine (`msdf up`) plus several service processes.
 | 19 | Data change step 2: `subscribe`, `cancel(request_id)`, subscriptions page | done (0.4) |
 | 20 | Slot type check at load time, ending idle subscriptions | done (0.5) |
 | 21 | Removing a 40ms wait between steps, performance measurements | done (0.5.1) |
+| 22 | Engine basics: indexed lookup of runnable steps, run history retention `--keep-history` | done (0.6) |
 
 ## Direction
 
@@ -55,6 +56,8 @@ With data change (`invalidate`, `subscribe`), the starting point — "react to d
 | Trace export | lineage and step timings to OpenTelemetry |
 | PyPI release, built-in PostgreSQL and S3 Resolvers | local first, then these |
 | Multiple users and roles | today there is one token for the whole engine |
+| Engine optimisation | per-step statistics and `msdf explain`, running the longest path first, cost-based hot/cold (never changing results; only measured wins on by default) |
+| Embedding storage | fast lossless (npy) storage for vectors. Quantisation stays a user Action recipe, never done silently by the engine |
 
 Not planned: periodic runs (cron), deploying or scaling services, LLM-specific features, code inside DAGs.
 Measured and declined: reusing memory between consecutive steps in the same service ([How it works › Performance](how-it-works.md#performance)).

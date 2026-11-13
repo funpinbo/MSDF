@@ -161,7 +161,7 @@ const selectedInfo = computed(() => {
   <div class="map-page">
     <div class="bar row wrap">
       <h2>실시간 데이터 흐름</h2>
-      <span class="faint">2초마다 갱신</span>
+      <span class="faint">바뀌면 바로 갱신</span>
       <div class="grow" />
       <label class="row muted"><input v-model="showFailures" type="checkbox" /> 실패 통지 경로</label>
       <div class="seg">

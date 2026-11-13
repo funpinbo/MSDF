@@ -325,11 +325,12 @@ class Engine:
 
         db = self.store.conn
         for s in p.steps:
+            deps = [ref(d) for d in s.deps]
             db.execute(
                 """INSERT INTO step (run_id, step_no, kind, node, service, action, step_key,
-                   generation, version, inputs, params, outputs, deps, status, max_retries,
-                   retry_delay, queued_at)
-                   VALUES (?, ?, 'produce', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)""",
+                   generation, version, inputs, params, outputs, deps, waiting, status,
+                   max_retries, retry_delay, queued_at)
+                   VALUES (?, ?, 'produce', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)""",
                 (
                     run_id,
                     s.no + offset,
@@ -347,7 +348,8 @@ class Engine:
                             for k, (lk, a) in s.outputs.items()
                         }
                     ),
-                    _j([ref(d) for d in s.deps]),
+                    _j(deps),
+                    self._record_deps(db, run_id, s.no + offset, deps),
                     s.retries,
                     s.retry_delay,
                     now,
@@ -358,9 +360,9 @@ class Engine:
         slot = spec.inputs[0] if spec and spec.inputs else "result"
         deps = [ref(p.result_ref)] if p.result_ref else []
         db.execute(
-            """INSERT INTO step (run_id, step_no, kind, service, action, inputs, deps, status,
-               max_retries, retry_delay, queued_at)
-               VALUES (?, ?, 'deliver', ?, ?, ?, ?, 'queued', ?, ?, ?)""",
+            """INSERT INTO step (run_id, step_no, kind, service, action, inputs, deps, waiting,
+               status, max_retries, retry_delay, queued_at)
+               VALUES (?, ?, 'deliver', ?, ?, ?, ?, ?, 'queued', ?, ?, ?)""",
             (
                 run_id,
                 len(p.steps) + 1 + offset,
@@ -368,6 +370,7 @@ class Engine:
                 act,
                 _j({slot: p.result_artifact}),
                 _j(deps),
+                self._record_deps(db, run_id, len(p.steps) + 1 + offset, deps),
                 spec.retries if spec else 0,
                 spec.retry_delay if spec else 0.0,
                 now,
@@ -385,30 +388,56 @@ class Engine:
         return p
 
     # --- 큐 ----------------------------------------------------------------
-    def _status_of(self, refs: list[str]) -> dict[str, str]:
-        out: dict[str, str] = {}
-        for r in refs:
-            run_id, no = r.rsplit(":", 1)
-            row = self.store.query(
-                "SELECT status FROM step WHERE run_id = ? AND step_no = ?", (run_id, int(no))
-            )
-            out[r] = row[0]["status"] if row else "missing"
-        return out
+    def _record_deps(self, db: Any, run_id: str, step_no: int, deps: list[str]) -> int:
+        """의존 관계를 step_dep에 남기고, 아직 끝나지 않은 deps 수(waiting)를 돌려준다."""
+        waiting = 0
+        for d in deps:
+            db.execute("INSERT OR IGNORE INTO step_dep VALUES (?, ?, ?)", (run_id, step_no, d))
+            dep_run, dep_no = d.rsplit(":", 1)
+            row = db.execute(
+                "SELECT status FROM step WHERE run_id = ? AND step_no = ?", (dep_run, int(dep_no))
+            ).fetchone()
+            if row is None or row["status"] != "done":
+                waiting += 1
+        return waiting
 
-    def ready(self, now: float | None = None, services: set[str] | None = None) -> list[StepTask]:
-        """지금 실행할 수 있는 단계. 의존 단계가 모두 끝났고 재시도 대기가 지난 것."""
-        now = self.clock() if now is None else now
-        rows = self.store.query(
-            "SELECT * FROM step WHERE status = 'queued' AND not_before <= ? "
-            "ORDER BY queued_at, run_id, step_no",
-            (now,),
+    def _release_dependents(self, db: Any, run_id: str, step_no: int) -> None:
+        """단계 하나가 끝났다: 그 단계를 기다리던 단계들의 waiting을 하나씩 줄인다."""
+        db.execute(
+            """UPDATE step SET waiting = waiting - 1
+               WHERE waiting > 0 AND (run_id, step_no) IN
+               (SELECT run_id, step_no FROM step_dep WHERE dep = ?)""",
+            (f"{run_id}:{step_no}",),
         )
+
+    def ready(
+        self,
+        now: float | None = None,
+        services: set[str] | None = None,
+        capacity: dict[str, int] | None = None,
+    ) -> list[StepTask]:
+        """지금 실행할 수 있는 단계: deps가 모두 끝났고(waiting = 0) 재시도 대기가 지난 것.
+
+        capacity(서비스 → 쉬는 인스턴스 수)를 주면 서비스마다 그만큼만 읽는다. 큐가 아무리 길어도
+        읽는 양은 쉬는 인스턴스 수에 비례한다.
+        """
+        now = self.clock() if now is None else now
+        base = "SELECT * FROM step WHERE status = 'queued' AND waiting = 0 AND not_before <= ?"
+        if capacity is not None:
+            rows = []
+            for svc, n in sorted(capacity.items()):
+                if n <= 0 or (services is not None and svc not in services):
+                    continue
+                rows += self.store.query(
+                    base + " AND service = ? ORDER BY queued_at, run_id, step_no LIMIT ?",
+                    (now, svc, n),
+                )
+            rows.sort(key=lambda r: (r["queued_at"] or 0, r["run_id"], r["step_no"]))
+        else:
+            rows = self.store.query(base + " ORDER BY queued_at, run_id, step_no", (now,))
         tasks: list[StepTask] = []
         for r in rows:
             if services is not None and r["service"] not in services:
-                continue
-            deps = json.loads(r["deps"])
-            if deps and any(v != "done" for v in self._status_of(deps).values()):
                 continue
             if r["kind"] == "deliver" and self._unchanged(r):
                 self._skip(r, now)
@@ -483,6 +512,17 @@ class Engine:
                    WHERE run_id = ? AND step_no = ? AND status = 'leased'""",
                 (now, run_id, step_no),
             )
+
+    def start(self, run_id: str, step_no: int, worker: str, now: float | None = None) -> bool:
+        """lease와 running을 한 트랜잭션으로 (Scheduler가 단계를 보내기 직전에 부른다)."""
+        now = self.clock() if now is None else now
+        with self.store.tx() as db:
+            cur = db.execute(
+                """UPDATE step SET status = 'running', worker = ?, lease_until = ?, started_at = ?
+                   WHERE run_id = ? AND step_no = ? AND status = 'queued'""",
+                (worker, now + self.settings.lease_ttl, now, run_id, step_no),
+            )
+        return cur.rowcount == 1
 
     def release(self, run_id: str, step_no: int) -> None:
         """보내지 못한 단계를 큐로 되돌린다."""
@@ -632,6 +672,7 @@ class Engine:
                    WHERE run_id = ? AND step_no = ?""",
                 (now, row["run_id"], row["step_no"]),
             )
+            self._release_dependents(db, row["run_id"], row["step_no"])
         for hook in self.on_register:
             hook(created)
         return None
@@ -843,6 +884,8 @@ class Engine:
         """
         now = self.clock() if now is None else now
         started: list[str] = []
+        if not self.store.query("SELECT 1 FROM subscription WHERE status = 'active' LIMIT 1"):
+            return started  # 구독이 없으면 쓰기 트랜잭션을 열지 않는다
         with self.store.tx() as db:
             db.execute(
                 """UPDATE subscription SET status = 'ended', ended_reason = 'expired'
@@ -1080,6 +1123,42 @@ class Engine:
 
     def purge(self) -> int:
         return ops.purge(self)
+
+    def purge_history(self, now: float | None = None, batch: int = 1000) -> int:
+        """keep_history보다 오래된 끝난 run과 그 step 기록을 지운다. 지운 run 수.
+
+        cache(Artifact)와 계보는 별도 표라 영향이 없다. 살아 있는 구독의 처음 요청과,
+        아직 끝나지 않은 run(실패 통지를 보내는 중 포함)은 남긴다. 엔진을 오래 붙잡지 않도록
+        한 번에 batch개까지만 지운다.
+        """
+        if self.settings.keep_history <= 0:
+            return 0
+        now = self.clock() if now is None else now
+        cutoff = now - self.settings.keep_history
+        rows = self.store.query(
+            """SELECT run_id FROM run
+               WHERE finished_at IS NOT NULL AND finished_at < ?
+               AND status IN ('done', 'failed', 'cancelled')
+               AND run_id NOT IN (SELECT request_id FROM subscription WHERE status = 'active')
+               AND NOT EXISTS (SELECT 1 FROM step s WHERE s.run_id = run.run_id
+                               AND s.status IN ('queued', 'leased', 'running', 'saved'))
+               LIMIT ?""",
+            (cutoff, batch),
+        )
+        ids_ = [r["run_id"] for r in rows]
+        if not ids_:
+            return 0
+        marks = ",".join("?" * len(ids_))
+        with self.store.tx() as db:
+            db.execute(f"DELETE FROM step_dep WHERE run_id IN ({marks})", ids_)
+            db.execute(f"DELETE FROM step WHERE run_id IN ({marks})", ids_)
+            db.execute(f"DELETE FROM run WHERE run_id IN ({marks})", ids_)
+            db.execute(
+                """DELETE FROM subscription WHERE status = 'ended'
+                   AND coalesce(last_refresh_at, created_at) < ?""",
+                (cutoff,),
+            )
+        return len(ids_)
 
     # --- 조회 --------------------------------------------------------------
     def run(self, run_id: str) -> dict[str, Any] | None:

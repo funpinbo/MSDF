@@ -167,7 +167,7 @@ msdf check [--root .] [--config DIR] [--allow-external] [--no-cache]
 msdf up    [--root .] [--config DIR] [--allow-external] [--no-cache]
            [--host 127.0.0.1] [--port 8787] [--db PATH] [--token SECRET]
            [--lease-ttl 60] [--keep-generations 3] [--keep-versions 3] [--no-ui] [--ui-dist DIR]
-           [--refresh-min-gap 1] [--max-subscriptions 1000] [--subscription-idle 600]
+           [--refresh-min-gap 1] [--max-subscriptions 1000] [--subscription-idle 600] [--keep-history 7d]
 
 # ask a running engine (--engine defaults to MSDF_SCHEDULER or http://127.0.0.1:8787, --token to MSDF_TOKEN)
 msdf status [--engine URL] [--token SECRET]        # which services are connected, last hour summary
@@ -192,6 +192,7 @@ msdf invalidate SERVICE.ACTION [--param k=v ...] [--data-version V] [--engine UR
 | `--refresh-min-gap` | 1 | minimum gap between refreshes of one subscription (seconds). Bursts of changes never recompute more often than this |
 | `--max-subscriptions` | 1000 | maximum number of live subscriptions |
 | `--subscription-idle` | 600 | end a service's subscriptions when it has been disconnected this long (seconds) |
+| `--keep-history` | `7d` | how long finished runs and their step records are kept. `30m`, `12h`, `7d` or seconds. `0` (or `forever`) keeps everything. The cache, lineage and runs of live subscriptions are never removed |
 | `--no-cache` | off | do not use the code analysis cache (`<config>/.msdf/scan.cache`), which skips re-reading unchanged files |
 
 Service-side environment variables: `MSDF_SCHEDULER` (engine address, default `http://127.0.0.1:8787`), `MSDF_TOKEN` (engine token).

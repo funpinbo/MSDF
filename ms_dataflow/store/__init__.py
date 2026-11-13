@@ -16,7 +16,7 @@ from ms_dataflow.errors import ConfigError
 
 log = logging.getLogger("msdf.store")
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # 버전 n의 DB를 n+1로 올리는 SQL. 표와 인덱스 생성은 schema.sql이 (IF NOT EXISTS로) 맡으므로
 # 여기에는 기존 표를 바꾸는 문장만 둔다.
@@ -27,6 +27,15 @@ MIGRATIONS: dict[int, str] = {
     4: "ALTER TABLE run ADD COLUMN subscription_id TEXT; "
     "ALTER TABLE run ADD COLUMN refresh_no INTEGER NOT NULL DEFAULT 0;",
     5: "ALTER TABLE subscription ADD COLUMN idle_since REAL;",
+    6: "ALTER TABLE step ADD COLUMN waiting INTEGER NOT NULL DEFAULT 0; "
+    "CREATE TABLE IF NOT EXISTS step_dep (run_id TEXT NOT NULL, step_no INTEGER NOT NULL, "
+    "dep TEXT NOT NULL, PRIMARY KEY (run_id, step_no, dep)); "
+    "INSERT OR IGNORE INTO step_dep SELECT s.run_id, s.step_no, d.value "
+    "FROM step s, json_each(s.deps) d; "
+    "UPDATE step SET waiting = (SELECT count(*) FROM step_dep sd WHERE sd.run_id = step.run_id "
+    "AND sd.step_no = step.step_no AND NOT EXISTS (SELECT 1 FROM step p "
+    "WHERE p.run_id || ':' || p.step_no = sd.dep AND p.status = 'done')) "
+    "WHERE status = 'queued';",
 }
 _MIN_SQLITE = (3, 35, 0)
 _COLD_SCHEMA = """

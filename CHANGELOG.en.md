@@ -2,6 +2,24 @@
 
 [한국어](CHANGELOG.md) | **English**
 
+## 0.6.0 — 2026-11-13
+
+### Changed (performance)
+
+- **Runnable steps are picked without reading the whole queue.** Each step keeps a count of unfinished upstream steps (`waiting`) and is looked up through an index, only as many per service as it has idle instances. Leasing a step and marking it running are one transaction, and subscription handling is skipped when no subscription is live. Under the same load (500 requests × 3 steps), throughput went from about **30 to 38 runs/s** and picking steps from **9.5ms to 1.0ms**.
+
+### New
+
+- **Run history retention `--keep-history`** (default `7d`, `0` keeps everything): finished runs and their step records older than that are removed in batches. The cache, lineage, unfinished runs and runs of live subscriptions are kept. A long-running engine's DB no longer grows forever because of run history.
+
+### Fixed
+
+- The web UI map said "refreshes every 2 seconds" while it actually updates as soon as something changes. The label is fixed.
+
+### Changed
+
+- DB schema v7 (`step.waiting`, `step_dep` table). Migrated automatically at startup with a backup; `waiting` of in-flight steps is computed during migration.
+
 ## 0.5.1 — 2026-11-13
 
 ### Fixed

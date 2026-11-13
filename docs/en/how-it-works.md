@@ -102,6 +102,9 @@ queued → leased → running → saved → done
 - Older metadata moves, together with its descendants, to **cold** (`.msdf/cold.db`) and is kept for tracing only. Cache lookups use hot only.
 - The data itself is never moved or deleted. How long it is kept is your storage's policy.
 - Parent–child links are not moved, so lineage can be followed across hot and cold.
+- **Run history** (runs and their steps) is kept separately from the cache, for `--keep-history` (default 7 days). The engine periodically removes
+  older finished runs, 1,000 at a time. Unfinished runs and runs of live subscriptions are kept, and the cache and lineage are untouched,
+  so the same request still hits the cache after its run is removed.
 
 ## Deletion
 
@@ -120,9 +123,8 @@ The engine keeps metadata in a SQLite file (`.msdf/msdf.db`).
 - **Only one dedicated engine thread writes to the DB.** Services do not read the queue themselves; the engine pushes work to them, so SQLite's concurrent-write problems do not arise.
 - WAL mode lets the UI read state while the engine writes.
 - When a new MSDF version changes the DB structure, the DB is **migrated automatically** at startup, after a backup `msdf.db.v<old version>.bak`
-  is written. A DB created by a newer MSDF is refused.
+  is written. A DB created by a newer MSDF is refused. That file holds only the cache and run history, so deleting it leaves the actual data in your storage unaffected.
 - Code analysis results are kept per file in `.msdf/scan.cache`, so unchanged files are not re-read (`--no-cache` turns it off).
-  That file holds only the cache and run history, so the actual data in your storage is unaffected.
 
 ## Performance
 
@@ -146,6 +148,24 @@ Measurements (one machine, a 3-step chain within one service, file storage):
   and 4.3MB with ~51ms load as a DataFrame (Parquet).
 - "Let the next step in the same service use the just-saved output from memory" was measured and declined. With small data it would save under 3%;
   for large data it would require routing the next step to the same instance and holding data in memory, which complicates failure recovery.
+
+### Under load
+
+When many requests arrive, the engine's single DB thread sets the throughput ceiling. 0.6 cut the work that thread does.
+
+- Picking runnable steps no longer reads the whole queue. Each step keeps a count of unfinished upstream steps (`waiting`), decreased as each one finishes.
+  Only steps with `waiting` 0 are looked up, through an index, and only as many per service as it has idle instances.
+- Leasing a step and marking it running are written in one transaction.
+- Subscription handling is skipped at once when no subscription is live.
+- Old run history is removed (`--keep-history`), so the DB does not grow forever.
+
+Measurements (one machine, 500 requests × 3 steps, 4 service instances, 4 rounds):
+
+| | 0.5.1 | 0.6.0 |
+| --- | --- | --- |
+| Throughput (runs/s) | 30.4 · 29.2 · 27.8 · 26.6 | 38.3 · 38.0 · 35.1 · 35.6 |
+| Picking runnable steps (median) | 9.5ms | 1.0ms |
+| Run and step records (200 a day, kept 3 days) | grow forever | stop at 800 and 3,200 |
 
 ## Web UI
 

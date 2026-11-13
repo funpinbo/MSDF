@@ -202,21 +202,25 @@ class Scheduler:
             log.info("구독 refresh: run %s", run_id)
         if started:
             self.version += 1
-        idle_services = {s for i in self.instances.values() if i.busy is None for s in i.services}
-        if not idle_services:
+        capacity: dict[str, int] = {}
+        for i in self.instances.values():
+            if i.busy is None:
+                for s in i.services:
+                    capacity[s] = capacity.get(s, 0) + 1
+        if not capacity:
             return 0
-        tasks: list[StepTask] = await self.db(self.engine.ready, None, idle_services)
+        tasks: list[StepTask] = await self.db(self.engine.ready, None, set(capacity), capacity)
         sent = 0
         for task in tasks:
             inst = self._pick(task.service)
             if inst is None:
                 continue
-            if not await self.db(self.engine.lease, task.run_id, task.step_no, inst.id):
+            # 서비스가 아주 빨리 결과를 보고할 수 있으므로 보내기 전에 running으로 둔다
+            # (lease와 running을 한 트랜잭션으로)
+            if not await self.db(self.engine.start, task.run_id, task.step_no, inst.id):
                 continue
             inst.busy = (task.run_id, task.step_no)
             inst.sent_at = time.time()
-            # 서비스가 아주 빨리 결과를 보고할 수 있으므로 보내기 전에 running으로 둔다
-            await self.db(self.engine.running, task.run_id, task.step_no)
             log.info(
                 "실행: %s:%s %s.%s → %s",
                 task.run_id,
@@ -268,6 +272,9 @@ class Scheduler:
                 self.drop(inst.id)
                 await self.db(self.engine.release_worker, inst.id)
         await self.db(self.engine.purge)
+        removed = await self.db(self.engine.purge_history, None)
+        if removed:
+            log.info("실행 기록 정리: run %d개 (보관 기간 지남)", removed)
         n = await self.db(self.engine.reap, None)
         if n:
             log.warning("lease 만료 → %d개 단계 재큐잉", n)

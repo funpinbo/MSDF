@@ -64,6 +64,15 @@ def build_app(
     return sched.app()
 
 
+def _history_seconds(value: str) -> float:
+    from ms_dataflow.models import parse_duration
+
+    if value.strip() in ("0", "none", "forever"):
+        return 0.0
+    td = parse_duration(value)
+    return td.total_seconds() if td else 0.0
+
+
 def cmd_up(args: argparse.Namespace) -> int:
     project = _load(args)
     if project is None:
@@ -74,6 +83,7 @@ def cmd_up(args: argparse.Namespace) -> int:
         reaper_every=min(10.0, args.lease_ttl / 6),
         keep_generations=args.keep_generations,
         keep_versions=args.keep_versions,
+        keep_history=_history_seconds(args.keep_history),
         refresh_min_gap=args.refresh_min_gap,
         max_subscriptions=args.max_subscriptions,
         subscription_idle=args.subscription_idle,
@@ -325,6 +335,11 @@ def main(argv: list[str] | None = None) -> int:
         type=float,
         default=600.0,
         help="요청 서비스가 이만큼(초) 연결되지 않으면 그 서비스의 구독을 끝낸다",
+    )
+    up.add_argument(
+        "--keep-history",
+        default="7d",
+        help="끝난 실행 기록(run, step)을 둘 기간. 예: 7d, 12h, 0(지우지 않음). cache는 영향 없음",
     )
     up.add_argument("--no-ui", action="store_true", help="웹 UI를 띄우지 않는다")
     up.add_argument(

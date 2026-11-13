@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS step (
   params      TEXT NOT NULL DEFAULT '{}',   -- 루트 produce만 (JSON)
   outputs     TEXT NOT NULL DEFAULT '{}',   -- 슬롯 → {lineage_key, artifact_id} (JSON)
   deps        TEXT NOT NULL DEFAULT '[]',   -- ["run_id:step_no", ...]
+  waiting     INTEGER NOT NULL DEFAULT 0,   -- 아직 끝나지 않은 deps 수. 0이면 실행할 수 있다
   fail_status TEXT,                   -- deliver_fail: failed | cancelled
   status      TEXT NOT NULL,          -- queued|leased|running|saved|done|failed|cancelled
   worker      TEXT,
@@ -87,6 +88,17 @@ CREATE TABLE IF NOT EXISTS step (
   PRIMARY KEY (run_id, step_no)
 );
 CREATE INDEX IF NOT EXISTS idx_step_status ON step(status);
+-- ready(): 실행할 수 있는 단계만 바로 찾는다 (큐 전체를 읽지 않는다)
+CREATE INDEX IF NOT EXISTS idx_step_ready ON step(status, waiting, service, queued_at);
+
+-- 단계 사이 의존 관계. 단계가 끝나면 이 표로 기다리던 단계를 찾아 waiting을 줄인다
+CREATE TABLE IF NOT EXISTS step_dep (
+  run_id  TEXT NOT NULL,
+  step_no INTEGER NOT NULL,
+  dep     TEXT NOT NULL,                 -- 기다리는 단계 "run_id:step_no"
+  PRIMARY KEY (run_id, step_no, dep)
+);
+CREATE INDEX IF NOT EXISTS idx_step_dep ON step_dep(dep);
 CREATE INDEX IF NOT EXISTS idx_step_queued ON step(queued_at);
 CREATE INDEX IF NOT EXISTS idx_run_created ON run(created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_run_idempotency ON run(requester, idempotency_key)

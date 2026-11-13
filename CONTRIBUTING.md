@@ -2,7 +2,7 @@
 
 **한국어** | [English](CONTRIBUTING.en.md)
 
-현재 버전: **0.5.1.** 다음에 할 일은 [docs/roadmap.md](docs/roadmap.md)의 "다음에 할 것"에 있습니다.
+현재 버전: **0.6.0.** 다음에 할 일은 [docs/roadmap.md](docs/roadmap.md)의 "다음에 할 것"에 있습니다.
 
 ## 시작하기
 

@@ -12,12 +12,18 @@ def _old_sql(version: int) -> str:
     """현재 schema.sql에서 그 버전 이후에 추가된 부분을 뺀다."""
     keep = []
     sql = _schema_sql()
+    if version < 7:
+        a = sql.index("-- ready(): 실행할 수 있는")
+        b = sql.index("CREATE INDEX IF NOT EXISTS idx_step_dep ON step_dep(dep);")
+        sql = sql[:a] + sql[b + len("CREATE INDEX IF NOT EXISTS idx_step_dep ON step_dep(dep);") :]
     if version < 5:
         sql = sql[: sql.index("-- subscribe:")]
     if version < 4:
         sql = sql[: sql.index("-- 데이터 주인 서비스가 invalidate()")]
     for line in sql.splitlines(keepends=True):
         if version < 5 and line.lstrip().startswith(("subscription_id ", "refresh_no ")):
+            continue
+        if version < 7 and line.lstrip().startswith("waiting "):
             continue
         if version < 6 and line.lstrip().startswith("idle_since "):
             continue
@@ -53,7 +59,7 @@ def _make_v1(path):
     _make(path, 1)
 
 
-@pytest.mark.parametrize("version", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 6])
 def test_migrates_old_versions(tmp_path, version):
     db = tmp_path / "msdf.db"
     _make(db, version)
@@ -87,3 +93,32 @@ def test_newer_db_is_refused(tmp_path):
     with pytest.raises(ConfigError) as e:
         Store(db)
     assert "더 새 버전" in e.value.reason
+
+
+def test_v7_migration_computes_waiting_for_queued_steps(tmp_path):
+    """업그레이드 직후에도 진행 중이던 단계가 정확히 그 deps를 기다린다."""
+    db = tmp_path / "msdf.db"
+    _make(db, 6)
+    conn = sqlite3.connect(db)
+    rows = [
+        # run r1: 1(done) → 2(queued, deps 1) → 3(queued, deps 2) ; 4(queued, deps 1, 2)
+        ("r1", 1, "done", "[]"),
+        ("r1", 2, "queued", '["r1:1"]'),
+        ("r1", 3, "queued", '["r1:2"]'),
+        ("r1", 4, "queued", '["r1:1", "r1:2"]'),
+        ("r1", 5, "queued", '["gone:9"]'),  # 없는 단계를 기다림 → 실행되면 안 된다
+    ]
+    for run_id, no, status, deps in rows:
+        conn.execute(
+            "INSERT INTO step (run_id, step_no, kind, service, action, deps, status) "
+            "VALUES (?, ?, 'produce', 's', 'a', ?, ?)",
+            (run_id, no, deps, status),
+        )
+    conn.commit()
+    conn.close()
+    store = Store(db)
+    got = {r["step_no"]: r["waiting"] for r in store.query("SELECT step_no, waiting FROM step")}
+    assert got == {1: 0, 2: 0, 3: 1, 4: 1, 5: 1}
+    deps = store.query("SELECT count(*) FROM step_dep")[0][0]
+    assert deps == 5
+    store.close()

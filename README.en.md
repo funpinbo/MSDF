@@ -14,7 +14,7 @@ the chatbot ends up owning "what to call, in which order, where to keep the resu
 a lot of data. MSDF moves that conductor role out of the features, so they run on data changes without knowing about each other.
 Adding or removing a feature then means editing only the DAG. → [Why MSDF](docs/en/background.md)
 
-> Current version **0.5.1**: runs on one machine as an engine plus several service processes. It is not on PyPI yet;
+> Current version **0.6.0**: runs on one machine as an engine plus several service processes. It is not on PyPI yet;
 > [install it from the repository or a git URL](docs/en/installation.md). What changed is in the [changelog](CHANGELOG.en.md); remaining work is in the [roadmap](docs/en/roadmap.md).
 >
 > CLI output, error messages and the web UI are currently in Korean. The bundled example uses Korean sample data.

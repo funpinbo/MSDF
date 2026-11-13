@@ -132,9 +132,8 @@ class LocalRunner:
         results = []
         self.engine.pump()  # 구독: 만료 정리, source가 바뀐 구독의 refresh 시작
         for task in self.engine.ready():
-            if not self.engine.lease(task.run_id, task.step_no, "local"):
+            if not self.engine.start(task.run_id, task.step_no, "local"):
                 continue
-            self.engine.running(task.run_id, task.step_no)
             spec = self.project.registry.action(task.service, task.action)
             assert spec is not None
             result = run_task(task, spec, self.pool, [str(self.project.root)])
