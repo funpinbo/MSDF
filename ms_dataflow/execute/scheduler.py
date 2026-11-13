@@ -348,12 +348,22 @@ class Scheduler:
                     },
                 )
             o = Order(
-                name=req.name, params=req.params, requester=req.requester, context=req.context
+                name=req.name,
+                params=req.params,
+                requester=req.requester,
+                context=req.context,
+                meta=req.meta,
+                idempotency_key=req.idempotency_key,
             )
             submitted = await sched.db(sched.engine.submit, o)
-            sched.kick()
-            log.info("order: %s by %s → run %s", req.name, req.requester, submitted.run_id)
-            return OrderResponse(run_id=submitted.run_id, lineage_key=submitted.lineage_key)
+            if not submitted.existing:
+                sched.kick()
+                log.info("order: %s by %s → run %s", req.name, req.requester, submitted.run_id)
+            return OrderResponse(
+                run_id=submitted.run_id,
+                lineage_key=submitted.lineage_key,
+                existing=submitted.existing,
+            )
 
         @app.post("/step/result")
         async def result(rep: ResultReport) -> dict[str, bool]:

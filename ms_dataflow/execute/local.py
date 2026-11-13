@@ -48,14 +48,23 @@ class LocalRunner:
             set_backend(self)
 
     # order() 백엔드
-    def submit(self, name: str, params: dict[str, Any], caller_file: str) -> str:
+    def submit(
+        self,
+        name: str,
+        params: dict[str, Any],
+        caller_file: str,
+        meta: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
+    ) -> str:
         requester = self.project.registry.owner_of(caller_file)
         if requester is None:
             raise OrderError(
                 f"{caller_file}이 어느 서비스에 속하는지 알 수 없습니다. "
                 "order()는 @service에서 import로 닿는 파일에서 호출하세요."
             )
-        return self.order(name, params, requester=requester)
+        return self.order(
+            name, params, requester=requester, meta=meta, idempotency_key=idempotency_key
+        )
 
     def order(
         self,
@@ -64,12 +73,25 @@ class LocalRunner:
         *,
         requester: str,
         context: dict[str, str] | None = None,
+        meta: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
     ) -> str:
+        """요청을 넣고 request_id를 돌려준다."""
         ctx = context if context is not None else current_context()
         self.last = self.engine.submit(
-            Order(name=name, params=params or {}, requester=requester, context=ctx)
+            Order(
+                name=name,
+                params=params or {},
+                requester=requester,
+                context=ctx,
+                meta=meta or {},
+                idempotency_key=idempotency_key,
+            )
         )
-        return self.last.lineage_key
+        return self.last.run_id
+
+    def cancel(self, request_id: str) -> dict[str, Any]:
+        return self.engine.cancel(request_id)
 
     def delete(self, key: str, cascade: bool, caller_file: str) -> dict[str, Any]:
         requester = self.project.registry.owner_of(caller_file)

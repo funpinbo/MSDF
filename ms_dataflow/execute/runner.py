@@ -42,6 +42,22 @@ def _error(task: StepTask, kind: str, message: str, lost: str | None = None) -> 
     )
 
 
+DELIVERY_ARGS = ("request_id", "meta", "error")
+
+
+def _delivery_extras(fn: Callable[..., Any], task: StepTask) -> dict[str, Any]:
+    """배달 Action이 인자로 선언한 것만 넣는다. 선언하지 않으면 0.2와 똑같이 부른다."""
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):  # pragma: no cover
+        return {}
+    accepts_any = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
+    values: dict[str, Any] = {"request_id": task.request_id, "meta": dict(task.meta)}
+    if task.kind == "deliver_fail":
+        values["error"] = task.error
+    return {k: v for k, v in values.items() if k in params or accepts_any}
+
+
 def run_task(
     task: StepTask,
     spec: ActionSpec,
@@ -66,7 +82,9 @@ def run_task(
     # 실행
     try:
         if task.kind == "deliver_fail":
-            value = _call(fn, task.status or "failed")
+            value = _call(fn, task.status or "failed", **_delivery_extras(fn, task))
+        elif task.kind == "deliver":
+            value = _call(fn, **kwargs, **_delivery_extras(fn, task))
         else:
             value = _call(fn, **kwargs, **task.params)
     except Exception as e:  # noqa: BLE001 - 사용자 예외는 삼키지 않고 원문을 남긴다

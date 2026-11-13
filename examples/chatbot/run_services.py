@@ -47,7 +47,8 @@ def main() -> None:
             question = QUESTIONS[i % len(QUESTIONS)]
             try:
                 print(f"> {question}", flush=True)
-                chatbot.chatbot(question)
+                # 사용자 셋이 번갈아 묻는다
+                chatbot.chatbot(question, session_id=f"user{i % 3 + 1}")
                 i += 1
             except OrderError as e:  # 다른 서비스가 아직 등록 중이면 잠시 뒤 다시
                 print(f"  (잠시 뒤 다시 시도: {e})", flush=True)

@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS run (
   status          TEXT NOT NULL,      -- running | done | failed
   replans         INTEGER NOT NULL DEFAULT 0,
   plan            TEXT,               -- {"steps": [노드], "cached": [노드], "joined": [노드]} (JSON)
+  meta            TEXT,               -- 요청한 쪽이 붙인 correlation metadata (JSON). cache key에 들어가지 않음
+  idempotency_key TEXT,               -- 요청한 쪽이 정한 키. 같은 requester + 키면 run을 새로 만들지 않음
   error           TEXT,
   created_at      REAL NOT NULL,
   finished_at     REAL
@@ -85,6 +87,8 @@ CREATE TABLE IF NOT EXISTS step (
 CREATE INDEX IF NOT EXISTS idx_step_status ON step(status);
 CREATE INDEX IF NOT EXISTS idx_step_queued ON step(queued_at);
 CREATE INDEX IF NOT EXISTS idx_run_created ON run(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_run_idempotency ON run(requester, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
 -- 같은 단계를 두 번 동시에 만들지 않는다. 끝난 단계는 제약에서 빠진다.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_inflight ON step(step_key)
   WHERE kind = 'produce' AND status IN ('queued', 'leased', 'running', 'saved');

@@ -193,3 +193,27 @@ def test_token_required_between_engine_and_services(secured):
     wait_for(lambda: any(e == "start_error" for e, _ in read_log(secured.root)))
     errors = [v for e, v in read_log(secured.root) if e == "start_error"]
     assert "토큰" in errors[0]
+
+
+def test_meta_and_request_id_over_http(cluster):
+    req = cluster.root / "req.py"
+    req.write_text(
+        req.read_text()
+        .replace(
+            'order("number", params={"n": n})', 'order("number", params={"n": n}, meta={"n": n})'
+        )
+        .replace(
+            'def on_done(result):\n    log("on_done", result)',
+            "def on_done(result, meta, request_id):\n"
+            '    log("on_done", {"r": result, "meta": meta, "id": request_id})',
+        )
+    )
+    assert "meta, request_id" in req.read_text()
+    cluster.service("src")
+    cluster.service("mid")
+    cluster.wait_started("src", "mid")
+    cluster.service("req", TRIGGER="2,3")
+    wait_for(lambda: len([e for e, _ in read_log(cluster.root) if e == "on_done"]) == 2)
+    got = [v for e, v in read_log(cluster.root) if e == "on_done"]
+    assert {g["meta"]["n"] for g in got} == {2, 3}
+    assert all(len(g["id"]) == 16 for g in got)

@@ -44,6 +44,19 @@ def test_chatbot_answers_from_sample_docs(chatbot_dir):
     assert (chatbot_dir / ".msdf" / "search.db").exists()
 
 
+def test_chatbot_answers_go_to_the_right_session(chatbot_dir):
+    with LocalRunner(chatbot_dir) as r:
+        chatbot = resolve_function(str(chatbot_dir / "chatbot.py"), "chatbot")
+        by_session = chatbot.__globals__["BY_SESSION"]
+        chatbot("환불은 언제 되나요", session_id="alice")
+        chatbot("배송 조회는 어디서 하나요", session_id="bob")
+        chatbot("환불은 언제 되나요", session_id="bob")
+        r.run_until_idle()
+    assert by_session["alice"] == [by_session["bob"][1]]
+    assert by_session["alice"][0].startswith("환불 정책:")
+    assert by_session["bob"][0].startswith("배송")
+
+
 def test_chatbot_iam_blocks_viewer(chatbot_dir):
     with LocalRunner(chatbot_dir) as r, pytest.raises(PermissionDenied) as e:
         r.order("search_result", {"q": "배송"}, requester="chatbot", context={"account": "viewer"})

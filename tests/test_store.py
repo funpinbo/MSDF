@@ -8,21 +8,50 @@ from ms_dataflow.errors import ConfigError
 from ms_dataflow.store import SCHEMA_VERSION, Store, _schema_sql
 
 
-def _make_v1(path):
-    sql = _schema_sql().replace(
-        '  plan            TEXT,               -- {"steps": [노드], "cached": [노드], "joined": [노드]} (JSON)\n',
-        "",
-    )
-    assert "plan  " not in sql
+def _old_sql(version: int) -> str:
+    """현재 schema.sql에서 그 버전 이후에 추가된 부분을 뺀다."""
+    keep = []
+    for line in _schema_sql().splitlines(keepends=True):
+        if version < 3 and (
+            line.lstrip().startswith(("meta ", "idempotency_key "))
+            or "idx_run_idempotency" in line
+            or "WHERE idempotency_key" in line
+        ):
+            continue
+        if version < 2 and line.lstrip().startswith("plan "):
+            continue
+        keep.append(line)
+    return "".join(keep)
+
+
+def _make(path, version: int):
+    sql = _old_sql(version)
+    assert ("idempotency_key" in sql) == (version >= 3)
     conn = sqlite3.connect(path)
     conn.executescript(sql)
     conn.execute(
         "INSERT INTO run(run_id, order_name, requester, params, context, status, created_at)"
         " VALUES ('r1', 'o', 'app', '{}', '{}', 'done', 1.0)"
     )
-    conn.execute("PRAGMA user_version = 1")
+    conn.execute(f"PRAGMA user_version = {version}")
     conn.commit()
     conn.close()
+
+
+def _make_v1(path):
+    _make(path, 1)
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_migrates_old_versions(tmp_path, version):
+    db = tmp_path / "msdf.db"
+    _make(db, version)
+    store = Store(db)
+    row = store.query("SELECT run_id, plan, meta, idempotency_key FROM run")[0]
+    assert row["run_id"] == "r1" and row["meta"] is None
+    assert store.query("PRAGMA user_version")[0][0] == SCHEMA_VERSION
+    store.close()
+    assert (tmp_path / f"msdf.db.v{version}.bak").exists()
 
 
 def test_migrates_v1_and_keeps_rows(tmp_path):

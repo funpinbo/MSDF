@@ -2,6 +2,22 @@
 
 [한국어](CHANGELOG.md) | **English**
 
+## 0.3.0 (in progress)
+
+### New
+
+- **You can tell which request a result belongs to** (request correlation).
+  - `order()` returns a **request_id**. A delivery Action that declares a `request_id` argument receives the same value.
+  - `order(..., meta={...})`: a small value handed back with the result (e.g. `session_id`). It is not used for the cache key or IAM, so the same question is computed once and delivered to each user separately.
+  - `order(..., idempotency_key="...")`: sending the same key again does not create a new run.
+  - `on_fail` can receive `error` (the last line of the failure cause).
+  - The web UI's run detail shows meta and idempotency_key.
+
+### Changed
+
+- **`order()` now returns a request_id instead of a lineage_key.** `delete()` accepts either.
+- DB schema v3 (migrated automatically at startup, with a backup).
+
 ## 0.2.0 — 2026-11-12
 
 ### New

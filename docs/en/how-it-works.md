@@ -46,13 +46,16 @@ MSDF is a **library**, not a server you upload code to. There are two kinds of p
 | Scheduler | queues steps and sends them to idle service instances. Leases, retries, failure propagation |
 | Resolver | stores, reads and deletes data according to configuration. Runs inside service processes and is the only part that knows the storage type |
 
-## Two IDs
+## Three IDs
 
-| | Identity of the request (`lineage_key`) | Identity of the data (`artifact_id`) |
-| --- | --- | --- |
-| Created | **before** computing | right **after** storing (the Planner computes the same value in advance) |
-| Inputs | service, Action, version, output slot, data ID per input slot, (for the first step) params | parent data IDs, the request identity, the generation |
-| Used for | cache lookups, duplicate prevention, the return value of `order()` | locating data, tracing provenance |
+| | `request_id` | `lineage_key` | `artifact_id` |
+| --- | --- | --- | --- |
+| Identity of | one request (run) | the computation (same computation, same key) | one stored piece of data |
+| Created | when `order()` is accepted | **before** computing | right **after** storing (the Planner computes the same value in advance) |
+| Inputs | random (differs per request) | service, Action, version, output slot, data ID per input slot, (for the first step) params | parent data IDs, lineage_key, the generation |
+| Used for | return value of `order()`, finding the request in deliveries, holding `meta` and `idempotency_key` | cache lookups, duplicate prevention (join) | locating data, tracing provenance |
+
+When two users ask the same question, the `lineage_key` is the same (computed once) and the `request_id`s differ (delivered to each).
 
 The data ID is computed deterministically, so the Planner knows it before execution and the storage produces the same value when saving.
 If the two differ, the engine fails that step (so that a wrong cache entry is never served).

@@ -144,6 +144,13 @@ class Order(Frozen):
     params: dict[str, JsonValue] = Field(default_factory=dict)
     requester: str
     context: dict[str, str] = Field(default_factory=dict)
+    meta: dict[str, JsonValue] = Field(
+        default_factory=dict
+    )  # 결과와 함께 돌려줄 값. cache key 아님
+    idempotency_key: str | None = None
+
+
+META_MAX_BYTES = 4096
 
 
 StepKind = Literal["produce", "deliver", "deliver_fail"]
@@ -175,6 +182,10 @@ class StepTask(Frozen):
     outputs: dict[str, OutputRef] = Field(default_factory=dict)
     status: str | None = None  # deliver_fail일 때 "failed" | "cancelled"
     attempt: int = 1
+    # deliver / deliver_fail만: 어느 요청의 결과인지
+    request_id: str | None = None
+    meta: dict[str, JsonValue] = Field(default_factory=dict)
+    error: str | None = None  # deliver_fail일 때 실패 사유 (마지막 줄)
 
 
 class SavedOutput(Frozen):
@@ -231,11 +242,14 @@ class OrderRequest(Frozen):
     name: str
     params: dict[str, JsonValue] = Field(default_factory=dict)
     context: dict[str, str] = Field(default_factory=dict)
+    meta: dict[str, JsonValue] = Field(default_factory=dict)
+    idempotency_key: str | None = None
 
 
 class OrderResponse(Frozen):
-    run_id: str
+    run_id: str  # = request_id
     lineage_key: str
+    existing: bool = False  # idempotency_key로 기존 요청을 돌려줬는지
 
 
 class ResultReport(Frozen):

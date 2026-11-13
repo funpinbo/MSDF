@@ -10,12 +10,12 @@ from ms_dataflow import service, action, order, start, context, delete
 
 | Name | What it does |
 | --- | --- |
-| `@service(name)` | Marks a service's entry point |
+| `service(name)` / `@service(name)` | Declares a service |
 | `@action(...)` | Marks a function that reads or writes data and declares its slots |
-| `order(name, params)` | Asks for a result by name |
+| `order(name, params, meta=...)` | Asks for a result by name and returns a request_id |
 | `start()` | Attaches this process to the engine |
 | `@context` | Marks a function that provides values for permission checks (account and so on) |
-| `delete(key)` | Deletes data produced by an `order()` |
+| `delete(request_id)` | Deletes data produced by an `order()` |
 
 Your service code never contains other services' names, database types, storage locations or data IDs. If it does, something is being used the wrong way.
 
@@ -110,12 +110,44 @@ def summarize(rows) -> tuple[dict, list]:
 ## `order()`
 
 ```python
-key = order("daily_stats", params={"day": day})
+request_id = order("daily_stats", params={"day": day})
+request_id = order("daily_stats", params={"day": day}, meta={"session_id": sid}, idempotency_key=msg_id)
 ```
 
 - **Returns immediately.** Carry on without waiting for the result.
 - The result arrives at the Actions listed in the DAG's `deliveries` (`on_success` / `on_fail`).
-- The return value is the identity (key) of the request. The same request gives the same key. It can be passed to `delete()`.
+- The return value is a **request_id**. It differs per request (even for the same data). It can also be passed to `delete()`.
+
+| Argument | Meaning | Part of the cache key? |
+| --- | --- | --- |
+| `params` | **what** to compute. Must match the first-step Action's `params` | yes |
+| `meta` | a small value to find **who** gets the result (e.g. `session_id`). The engine keeps it and hands it back to the delivery Action. JSON, up to 4 KB | no; not used by IAM either |
+| `idempotency_key` | if the same service sends the same key again, nothing new runs and the first request_id is returned. For resending after a network error | – |
+
+Because `meta` is not part of the cache key, when two users ask the same question it is **computed once and delivered separately, each with its own `meta`**.
+
+### What delivery Actions receive
+
+```python
+@action(inputs=["stats"])
+def on_stats(stats: dict, meta: dict, request_id: str):     # meta and request_id only if declared
+    send_to_user(meta["session_id"], stats)
+
+@action
+def on_stats_failed(status: str, meta: dict, error: str | None):
+    send_to_user(meta["session_id"], f"failed ({status})")
+```
+
+| Argument | on_success | on_fail | Value |
+| --- | --- | --- | --- |
+| result slot (first name in `inputs`) | ○ | – | the DAG's `result` |
+| `status` (first argument) | – | ○ | `"failed"` or `"cancelled"` |
+| `request_id` | ○ | ○ | the value `order()` returned |
+| `meta` | ○ | ○ | the `meta` given to `order()` (`{}` if none) |
+| `error` | – | ○ | last line of the failure cause (`None` if none) |
+
+Arguments you do not declare are not passed, so existing delivery Actions keep working. Computing (produce) Actions never receive `meta`:
+a value outside the cache key must not change a result.
 - The requesting service's name is filled in automatically from the file that called `order()`. You do not pass it, and you cannot pretend to be another service.
 - The names in `params` must exactly match the names the DAG's first-step Action declares with `params=[...]`. Values must be JSON-serializable.
 
@@ -193,10 +225,10 @@ def who() -> dict:
 ## `delete()`
 
 ```python
-key = order("daily_stats", params={"day": day})
+request_id = order("daily_stats", params={"day": day})
 # ... once you are done with the result
-delete(key)                 # delete that result
-delete(key, cascade=True)   # also delete data produced from it
+delete(request_id)                 # delete that result
+delete(request_id, cascade=True)   # also delete data produced from it
 ```
 
 - Checked against IAM `delete` rules. Raises `PermissionDenied` if blocked.

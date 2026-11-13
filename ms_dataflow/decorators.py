@@ -194,7 +194,14 @@ def context_declared() -> bool:
 
 # --- order() ---------------------------------------------------------------
 class OrderBackend(Protocol):
-    def submit(self, name: str, params: dict[str, Any], caller_file: str) -> str: ...
+    def submit(
+        self,
+        name: str,
+        params: dict[str, Any],
+        caller_file: str,
+        meta: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
+    ) -> str: ...
 
     def delete(self, key: str, cascade: bool, caller_file: str) -> dict[str, Any]: ...
 
@@ -209,19 +216,38 @@ def set_backend(backend: OrderBackend | None) -> None:
             _BACKEND.append(backend)
 
 
-def order(name: str, params: dict[str, Any] | None = None) -> str:
+def order(
+    name: str,
+    params: dict[str, Any] | None = None,
+    *,
+    meta: dict[str, Any] | None = None,
+    idempotency_key: str | None = None,
+) -> str:
     """결과물을 이름으로 요청한다. 즉시 반환하며, 결과는 DAG의 deliveries로 도착한다.
 
-    반환값은 요청의 정체(lineage_key)다. 요청 서비스 이름은 자동으로 채워진다.
+    - 반환값은 request_id다. 요청마다 다르다(같은 데이터를 요청해도). 배달 Action이 ``request_id``
+      인자를 선언하면 같은 값을 받는다.
+    - meta: 결과와 함께 돌려받을 작은 JSON 값(예: session_id). 계산에는 쓰이지 않으므로
+      cache key가 아니다. 배달 Action(on_success, on_fail)이 ``meta`` 인자를 선언하면 받는다.
+      4 KB까지.
+    - idempotency_key: 같은 서비스가 같은 키로 다시 요청하면 새로 실행하지 않고 처음
+      request_id를 돌려준다.
+    요청 서비스 이름은 자동으로 채워진다.
     """
     if not _BACKEND:
         raise OrderError("엔진에 연결되지 않았습니다. 서비스 시작 시 start()를 먼저 호출하세요.")
+    if meta is not None and not isinstance(meta, dict):
+        raise OrderError("meta는 dict여야 합니다 (예: {'session_id': 'abc'}).")
     caller = _realpath(sys._getframe(1).f_code.co_filename)
-    return _BACKEND[0].submit(name, dict(params or {}), caller)
+    return _BACKEND[0].submit(
+        name, dict(params or {}), caller, dict(meta) if meta else None, idempotency_key
+    )
 
 
 def delete(key: str, *, cascade: bool = False) -> int:
-    """order()가 돌려준 키로 만든 데이터를 지운다. 지운 Artifact 수를 돌려준다.
+    """order()가 돌려준 request_id(또는 데이터의 lineage_key)로 만든 데이터를 지운다.
+
+    지운 Artifact 수를 돌려준다.
 
     IAM의 delete 규칙으로 검사한다. cascade=True면 그 데이터로 만든 하위 데이터도 지운다.
     """

@@ -287,6 +287,8 @@ def runs_log(
         d["params"] = json.loads(d["params"])
         d["context"] = json.loads(d["context"])
         d["plan"] = json.loads(d["plan"]) if d["plan"] else None
+        d["meta"] = json.loads(d["meta"]) if d.get("meta") else {}
+        d["request_id"] = d["run_id"]
         d["duration_ms"] = _ms(d["created_at"], d["finished_at"])
         out.append(d)
     return out

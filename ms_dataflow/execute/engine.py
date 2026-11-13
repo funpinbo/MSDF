@@ -18,6 +18,7 @@ from ms_dataflow import ids, ops
 from ms_dataflow.config.dag import ancestors, delivery_for
 from ms_dataflow.config.resolvers import ResolverConfig
 from ms_dataflow.errors import (
+    OrderError,
     ParamError,
     PermissionDenied,
     ServiceUnavailable,
@@ -25,6 +26,7 @@ from ms_dataflow.errors import (
 )
 from ms_dataflow.models import (
     ACTIVE,
+    META_MAX_BYTES,
     Dag,
     Delivery,
     InputRef,
@@ -52,9 +54,10 @@ class Authorizer(Protocol):
 
 @dataclass(frozen=True)
 class Submitted:
-    run_id: str
-    lineage_key: str
-    plan: Plan
+    run_id: str  # = request_id. 요청 하나의 정체 (같은 데이터라도 요청마다 다르다)
+    lineage_key: str  # 결과 데이터의 정체 (같은 요청 내용이면 같다)
+    plan: Plan | None  # 기존 요청을 돌려줬으면 None
+    existing: bool = False
 
 
 def _j(value: Any) -> str:
@@ -177,17 +180,48 @@ class Engine:
         return dag, delivery
 
     def submit(self, order: Order) -> Submitted:
+        meta_json = _j(order.meta) if order.meta else None
+        if meta_json is not None and len(meta_json.encode()) > META_MAX_BYTES:
+            raise OrderError(
+                f"meta가 너무 큽니다 ({len(meta_json.encode())} bytes > {META_MAX_BYTES}). "
+                "meta에는 session_id처럼 결과를 돌려줄 곳을 찾는 작은 값만 넣으세요."
+            )
+        if order.idempotency_key is not None:
+            prev = self._by_idempotency(order.requester, order.idempotency_key)
+            if prev is not None:
+                if prev["order_name"] != order.name or json.loads(prev["params"]) != order.params:
+                    raise OrderError(
+                        f"idempotency_key '{order.idempotency_key}'는 다른 요청"
+                        f"({prev['order_name']})에 이미 쓰였습니다."
+                    )
+                return Submitted(prev["run_id"], prev["result_lineage"] or "", None, existing=True)
         dag, delivery = self.check(order)
         run_id = ids.run_id(f"{order.name}:{uuid.uuid4()}")
         with self.store.tx() as db:
             now = self.now()
             db.execute(
-                """INSERT INTO run (run_id, order_name, requester, params, context, status,
-                   created_at) VALUES (?, ?, ?, ?, ?, 'running', ?)""",
-                (run_id, order.name, order.requester, _j(order.params), _j(order.context), now),
+                """INSERT INTO run (run_id, order_name, requester, params, context, meta,
+                   idempotency_key, status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?)""",
+                (
+                    run_id,
+                    order.name,
+                    order.requester,
+                    _j(order.params),
+                    _j(order.context),
+                    meta_json,
+                    order.idempotency_key,
+                    now,
+                ),
             )
             p = self._enqueue(run_id, dag, delivery, order, now, first_no=1)
         return Submitted(run_id, p.result_lineage, p)
+
+    def _by_idempotency(self, requester: str, key: str) -> Any:
+        rows = self.store.query(
+            "SELECT * FROM run WHERE requester = ? AND idempotency_key = ?", (requester, key)
+        )
+        return rows[0] if rows else None
 
     def _enqueue(
         self, run_id: str, dag: Dag, delivery: Delivery, order: Order, now: float, first_no: int
@@ -299,6 +333,15 @@ class Engine:
             )
             for slot, v in json.loads(r["outputs"]).items()
         }
+        extra: dict[str, Any] = {}
+        if r["kind"] in ("deliver", "deliver_fail"):
+            run = self.store.query("SELECT meta, error FROM run WHERE run_id = ?", (r["run_id"],))
+            extra["request_id"] = r["run_id"]
+            if run and run[0]["meta"]:
+                extra["meta"] = json.loads(run[0]["meta"])
+            if r["kind"] == "deliver_fail" and run and run[0]["error"]:
+                lines = str(run[0]["error"]).strip().splitlines()
+                extra["error"] = lines[-1][:500] if lines else None
         return StepTask(
             run_id=r["run_id"],
             step_no=r["step_no"],
@@ -311,6 +354,7 @@ class Engine:
             outputs=outputs,
             status=r["fail_status"],
             attempt=r["attempts"] + 1,
+            **extra,
         )
 
     def _backend_of(self, artifact_id: str) -> dict[str, Any]:
@@ -653,9 +697,15 @@ class Engine:
 
     # --- 삭제 --------------------------------------------------------------
     def delete(
-        self, requester: str, context: dict[str, str], lineage_key: str, cascade: bool = False
+        self, requester: str, context: dict[str, str], key: str, cascade: bool = False
     ) -> dict[str, Any]:
-        return ops.delete(self, requester, context, lineage_key, cascade)
+        """key는 order()가 돌려준 request_id 또는 데이터의 lineage_key."""
+        rows = self.store.query(
+            "SELECT result_lineage FROM run WHERE run_id = ? AND requester = ?", (key, requester)
+        )
+        if rows and rows[0]["result_lineage"]:
+            key = rows[0]["result_lineage"]
+        return ops.delete(self, requester, context, key, cascade)
 
     def purge(self) -> int:
         return ops.purge(self)

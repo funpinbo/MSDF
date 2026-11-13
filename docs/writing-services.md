@@ -10,12 +10,12 @@ from ms_dataflow import service, action, order, start, context, delete
 
 | 이름 | 하는 일 |
 | --- | --- |
-| `@service(name)` | 서비스의 진입점을 표시합니다 |
+| `service(name)` / `@service(name)` | 서비스를 선언합니다 |
 | `@action(...)` | 데이터를 읽거나 쓰는 함수를 표시하고 슬롯을 선언합니다 |
-| `order(name, params)` | 결과물을 이름으로 요청합니다 |
+| `order(name, params, meta=...)` | 결과물을 이름으로 요청하고 request_id를 받습니다 |
 | `start()` | 이 프로세스를 엔진에 붙입니다 |
 | `@context` | 권한 검사에 쓸 값(계정 등)을 알려 주는 함수를 표시합니다 |
-| `delete(key)` | `order()`로 만든 데이터를 지웁니다 |
+| `delete(request_id)` | `order()`로 만든 데이터를 지웁니다 |
 
 서비스 코드에는 다른 서비스의 이름, DB 종류, 저장 위치, 데이터 ID가 나오지 않습니다. 나오게 된다면 무언가 잘못 쓰고 있다는 신호입니다.
 
@@ -107,12 +107,43 @@ def summarize(rows) -> tuple[dict, list]:
 ## `order()`
 
 ```python
-key = order("daily_stats", params={"day": day})
+request_id = order("daily_stats", params={"day": day})
+request_id = order("daily_stats", params={"day": day}, meta={"session_id": sid}, idempotency_key=msg_id)
 ```
 
 - **즉시 반환**합니다. 결과를 기다리지 않고 다른 일을 계속합니다.
 - 결과는 DAG의 `deliveries`에 적힌 Action(`on_success` / `on_fail`)으로 도착합니다.
-- 반환값은 요청의 정체(키)입니다. 같은 요청이면 같은 키가 나옵니다. `delete()`에 쓸 수 있습니다.
+- 반환값은 **request_id**입니다. 요청마다 다릅니다(같은 데이터를 요청해도). `delete()`에도 쓸 수 있습니다.
+
+| 인자 | 뜻 | cache key에 들어가나 |
+| --- | --- | --- |
+| `params` | **무엇을** 계산할지. DAG 첫 단계 Action의 `params`와 맞아야 함 | 들어감 |
+| `meta` | 결과를 **누구에게** 돌려줄지 찾는 작은 값(예: `session_id`). 엔진이 보관했다가 delivery Action에 그대로 돌려줌. JSON, 4 KB까지 | 안 들어감. IAM에도 쓰지 않음 |
+| `idempotency_key` | 같은 서비스가 같은 키로 다시 요청하면 새로 실행하지 않고 처음 request_id를 돌려줌. 네트워크 오류로 다시 보낼 때 | – |
+
+`meta`가 cache key가 아니므로, 두 사용자가 같은 질문을 하면 **계산은 한 번, 결과는 각자의 `meta`와 함께 따로** 배달됩니다.
+
+### delivery Action이 받는 것
+
+```python
+@action(inputs=["stats"])
+def on_stats(stats: dict, meta: dict, request_id: str):     # meta, request_id는 선언할 때만 받음
+    send_to_user(meta["session_id"], stats)
+
+@action
+def on_stats_failed(status: str, meta: dict, error: str | None):
+    send_to_user(meta["session_id"], f"실패했습니다 ({status})")
+```
+
+| 인자 | on_success | on_fail | 값 |
+| --- | --- | --- | --- |
+| 결과 슬롯 (`inputs`의 첫 이름) | ○ | – | DAG의 `result` |
+| `status` (첫 인자) | – | ○ | `"failed"` 또는 `"cancelled"` |
+| `request_id` | ○ | ○ | `order()`가 돌려준 값 |
+| `meta` | ○ | ○ | `order()`에 준 `meta` (없으면 `{}`) |
+| `error` | – | ○ | 실패 원인의 마지막 줄 (없으면 `None`) |
+
+선언하지 않은 인자는 넣지 않으므로 기존 delivery Action은 그대로 동작합니다. 계산하는 Action(produce)은 `meta`를 받지 않습니다. cache key에 없는 값이 결과를 바꾸면 cache가 틀어지기 때문입니다.
 - 요청한 서비스의 이름은 `order()`를 부른 파일로 자동으로 정해집니다. 인자로 적지 않으며, 다른 서비스인 척할 수 없습니다.
 - `params`의 이름은 DAG 첫 단계 Action이 `params=[...]`로 선언한 이름과 정확히 맞아야 합니다. 값은 JSON으로 바꿀 수 있어야 합니다.
 
@@ -189,10 +220,10 @@ def who() -> dict:
 ## `delete()`
 
 ```python
-key = order("daily_stats", params={"day": day})
+request_id = order("daily_stats", params={"day": day})
 # ... 결과를 다 쓴 뒤
-delete(key)                 # 그 결과 데이터를 지운다
-delete(key, cascade=True)   # 그 데이터로 만든 하위 데이터까지
+delete(request_id)                 # 그 결과 데이터를 지운다
+delete(request_id, cascade=True)   # 그 데이터로 만든 하위 데이터까지
 ```
 
 - IAM의 `delete` 규칙으로 검사합니다. 막히면 `PermissionDenied`.

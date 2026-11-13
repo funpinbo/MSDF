@@ -31,7 +31,7 @@ def test_order_roundtrip_and_cache(calc):
         key = r.order("number", {"n": 3}, requester="req")
         r.run_until_idle()
         assert read_log(calc) == [("on_done", {"value": 8})]  # Action은 하나도 실행되지 않음
-        assert key == r.last.lineage_key
+        assert key == r.last.run_id  # order()는 request_id를 돌려준다
         assert r.last.plan.cached == ["make", "add", "double"]
 
 

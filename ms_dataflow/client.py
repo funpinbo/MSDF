@@ -190,13 +190,22 @@ class Client:
             )
         return owner
 
-    def submit(self, name: str, params: dict[str, Any], caller_file: str) -> str:
+    def submit(
+        self,
+        name: str,
+        params: dict[str, Any],
+        caller_file: str,
+        meta: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
+    ) -> str:
         req = OrderRequest(
             instance_id=self.instance_id,
             requester=self._requester(caller_file),
             name=name,
             params=params,
             context=current_context(),
+            meta=meta or {},
+            idempotency_key=idempotency_key,
         )
         try:
             resp = self.http.post(f"{self.scheduler}/order", content=req.model_dump_json())
@@ -204,7 +213,7 @@ class Client:
             raise OrderError(f"엔진에 연결할 수 없습니다 ({self.scheduler}): {e}") from None
         if resp.status_code != 200:
             _raise_order_error(resp)
-        return str(resp.json()["lineage_key"])
+        return str(resp.json()["run_id"])
 
     def delete(self, key: str, cascade: bool, caller_file: str) -> dict[str, Any]:
         req = DeleteRequest(

@@ -2,6 +2,22 @@
 
 **한국어** | [English](CHANGELOG.en.md)
 
+## 0.3.0 (작업 중)
+
+### 새 기능
+
+- **결과가 어느 요청의 것인지 알 수 있습니다** (request correlation).
+  - `order()`가 **request_id**를 돌려줍니다. delivery Action이 `request_id` 인자를 선언하면 같은 값을 받습니다.
+  - `order(..., meta={...})`: 결과와 함께 돌려받을 작은 값(예: `session_id`). cache key와 IAM에 쓰지 않으므로, 같은 질문은 한 번만 계산하고 사용자마다 따로 배달합니다.
+  - `order(..., idempotency_key="...")`: 같은 키로 다시 보내도 run을 새로 만들지 않습니다.
+  - `on_fail`이 `error`(실패 원인 마지막 줄)를 받을 수 있습니다.
+  - 웹 UI 실행 상세에 meta와 idempotency_key가 보입니다.
+
+### 바뀐 것
+
+- **`order()`의 반환값이 lineage_key에서 request_id로 바뀌었습니다.** `delete()`는 둘 다 받습니다.
+- DB 스키마 v3 (시작할 때 자동 변환, 백업 남김).
+
 ## 0.2.0 — 2026-11-12
 
 ### 새 기능

@@ -79,6 +79,8 @@ function bar(s) {
           <span><span class="faint">걸린 시간</span> {{ ms(data.run.duration_ms) }}</span>
           <span><span class="faint">params</span> <code>{{ JSON.stringify(data.run.params) }}</code></span>
           <span v-if="Object.keys(data.run.context).length"><span class="faint">context</span> <code>{{ JSON.stringify(data.run.context) }}</code></span>
+          <span v-if="data.run.meta && Object.keys(data.run.meta).length" title="요청한 쪽이 붙인 값. 계산에는 쓰이지 않고 배달 Action에 그대로 돌아간다"><span class="faint">meta</span> <code>{{ JSON.stringify(data.run.meta) }}</code></span>
+          <span v-if="data.run.idempotency_key"><span class="faint">idempotency_key</span> <code>{{ data.run.idempotency_key }}</code></span>
           <span v-if="data.run.plan"><span class="faint">계획</span> 실행 {{ data.run.plan.steps.length }} · 캐시 {{ data.run.plan.cached.length }} · 합류 {{ data.run.plan.joined.length }}</span>
           <span v-if="data.run.replans"><span class="faint">재계획</span> {{ data.run.replans }}회</span>
         </div>
